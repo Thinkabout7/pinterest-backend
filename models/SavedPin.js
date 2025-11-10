@@ -1,3 +1,5 @@
+//SavedPin.js
+
 import mongoose from "mongoose";
 
 const savedPinSchema = new mongoose.Schema(

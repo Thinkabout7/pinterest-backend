@@ -1,3 +1,6 @@
+
+
+//SavedPinRoutes.js
 import express from "express";
 import SavedPin from "../models/SavedPin.js";
 import Pin from "../models/Pin.js";
@@ -44,7 +47,7 @@ router.delete("/:pinId/unsave", protect, async (req, res) => {
 });
 
 // ---------- GET all saved pins for a specific user ----------
-router.get("/:username/saved", async (req, res) => {
+router.get("/users:username/saved-pins", async (req, res) => {
   try {
     const { username } = req.params;
     const user = await User.findOne({ username });
