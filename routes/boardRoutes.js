@@ -36,6 +36,54 @@ router.get("/", protect, async (req, res) => {
   }
 });
 
+// 📖 Get a single board by ID
+router.get("/:boardId", protect, async (req, res) => {
+  try {
+    const board = await Board.findOne({
+      _id: req.params.boardId,
+      user: req.user._id,
+    })
+      .populate("pins", "title mediaUrl mediaType")
+      .populate("user", "username profilePicture");
+
+    if (!board) return res.status(404).json({ message: "Board not found" });
+
+    res.status(200).json(board);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ✏ Update board (name, description, cover image)
+router.put("/:boardId", protect, async (req, res) => {
+  try {
+    const { name, description, coverImage } = req.body;
+
+    const board = await Board.findOne({
+      _id: req.params.boardId,
+      user: req.user._id,
+    });
+    if (!board) return res.status(404).json({ message: "Board not found" });
+
+    if (name) board.name = name;
+    if (description !== undefined) board.description = description;
+
+    // if user uploads new cover, replace it
+    if (coverImage) {
+      board.coverImage = coverImage;
+    } else if (!board.coverImage && board.pins.length > 0) {
+      // if no cover set, use first pin as default
+      const firstPin = await Pin.findById(board.pins[0]);
+      if (firstPin?.mediaUrl) board.coverImage = firstPin.mediaUrl;
+    }
+
+    await board.save();
+    res.status(200).json({ message: "Board updated", board });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // 📌 Add a pin to a board
 router.post("/:boardId/pins/:pinId", protect, async (req, res) => {
   try {
@@ -52,6 +100,12 @@ router.post("/:boardId/pins/:pinId", protect, async (req, res) => {
       return res.status(400).json({ message: "Pin already in board" });
 
     board.pins.push(pin._id);
+
+    // if no cover image set, use this first pin
+    if (!board.coverImage && pin.mediaUrl) {
+      board.coverImage = pin.mediaUrl;
+    }
+
     await board.save();
     res.status(200).json(board);
   } catch (err) {
@@ -71,9 +125,15 @@ router.delete("/:boardId/pins/:pinId", protect, async (req, res) => {
     board.pins = board.pins.filter(
       (p) => p.toString() !== req.params.pinId.toString()
     );
-    await board.save();
 
-    res.status(200).json({ message: "Pin removed from board" });
+    // If the removed pin was the cover, clear coverImage
+    if (board.coverImage) {
+      const pin = await Pin.findById(req.params.pinId);
+      if (pin?.mediaUrl === board.coverImage) board.coverImage = "";
+    }
+
+    await board.save();
+    res.status(200).json({ message: "Pin removed from board", board });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

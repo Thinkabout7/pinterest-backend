@@ -5,6 +5,7 @@ const boardSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     description: { type: String, trim: true },
+    coverImage: { type: String, default: "" }, // 👈 Added
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
