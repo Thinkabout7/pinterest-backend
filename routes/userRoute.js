@@ -5,6 +5,26 @@ import Board from "../models/Board.js";
 
 const router = express.Router();
 
+
+// ---------- GET all users ----------
+router.get("/", async (req, res) => {
+  try {
+    const users = await User.find()
+      .select("_id username email profilePicture followers following createdAt")
+      .sort({ createdAt: -1 });
+
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+
+
+
+
+
+
 // ---------- Get user by username ----------
 router.get("/:username", async (req, res) => {
   try {
