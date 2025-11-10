@@ -21,6 +21,7 @@ const notificationSchema = new mongoose.Schema(
     pin: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Pin", // optional (only for like/comment)
+      default: null,
     },
     message: {
       type: String,
