@@ -63,7 +63,7 @@ app.use((err, req, res, next) => {
 
 
 
-
+console.log("SavedPin routes loaded");
 
 
 // Start server

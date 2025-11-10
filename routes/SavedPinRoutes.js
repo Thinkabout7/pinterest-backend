@@ -1,6 +1,4 @@
-
-
-//SavedPinRoutes.js
+// routes/SavedPinRoutes.js
 import express from "express";
 import SavedPin from "../models/SavedPin.js";
 import Pin from "../models/Pin.js";
@@ -18,7 +16,6 @@ router.post("/:pinId/save", protect, async (req, res) => {
     const pin = await Pin.findById(pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
-    // check if already saved
     const alreadySaved = await SavedPin.findOne({ user: userId, pin: pinId });
     if (alreadySaved)
       return res.status(400).json({ message: "Pin already saved" });
@@ -47,7 +44,7 @@ router.delete("/:pinId/unsave", protect, async (req, res) => {
 });
 
 // ---------- GET all saved pins for a specific user ----------
-router.get("/users/:username/saved-pins", async (req, res) => {
+router.get("/:username/saved-pins", async (req, res) => {
   try {
     const { username } = req.params;
     const user = await User.findOne({ username });
@@ -61,7 +58,6 @@ router.get("/users/:username/saved-pins", async (req, res) => {
       })
       .sort({ savedAt: -1 });
 
-    // Return just the pin objects
     res.status(200).json(savedPins.map((s) => s.pin));
   } catch (error) {
     res.status(500).json({ message: error.message });
