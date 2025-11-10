@@ -2,26 +2,43 @@
 import express from "express";
 import Pin from "../models/Pin.js";
 import User from "../models/User.js";
+import Like from "../models/Like.js";
+import Comment from "../models/Comment.js";
 import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// 📜 Get feed pins (from followed users + self)
+// 📜 Get feed pins (from followed users + self, fallback to global)
 router.get("/", protect, async (req, res) => {
   try {
-    // find the current user
-    const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const me = await User.findById(req.user._id);
+    if (!me) return res.status(404).json({ message: "User not found" });
 
-    // collect user IDs: people you follow + yourself
-    const userIds = [...user.following, req.user._id];
+    const userIds = [...me.following, req.user._id];
 
-    // get pins made by those users
-    const pins = await Pin.find({ user: { $in: userIds } })
-      .populate("user", "username avatar")
-      .sort({ createdAt: -1 }); // newest first
+    // If user follows nobody, show global feed instead
+    const filter = userIds.length > 0 ? { user: { $in: userIds } } : {};
 
-    res.status(200).json(pins);
+    const pins = await Pin.find(filter)
+      .populate("user", "username profilePicture")
+      .sort({ createdAt: -1 });
+
+    // Optional: enrich each pin with like/comment counts
+    const enriched = await Promise.all(
+      pins.map(async (pin) => {
+        const [likes, comments] = await Promise.all([
+          Like.countDocuments({ pin: pin._id }),
+          Comment.countDocuments({ pin: pin._id }),
+        ]);
+        return {
+          ...pin.toObject(),
+          likesCount: likes,
+          commentsCount: comments,
+        };
+      })
+    );
+
+    res.status(200).json(enriched);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
