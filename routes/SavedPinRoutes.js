@@ -47,7 +47,7 @@ router.delete("/:pinId/unsave", protect, async (req, res) => {
 });
 
 // ---------- GET all saved pins for a specific user ----------
-router.get("/users:username/saved-pins", async (req, res) => {
+router.get("/users/:username/saved-pins", async (req, res) => {
   try {
     const { username } = req.params;
     const user = await User.findOne({ username });
