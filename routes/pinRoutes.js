@@ -69,6 +69,31 @@ router.put("/:id", protect, async (req, res) => {
   }
 });
 
+// ---------- GET single Pin by ID ----------
+router.get("/:id", async (req, res) => {
+  try {
+    const pin = await Pin.findById(req.params.id)
+      .populate("user", "username email avatar");
+    
+    if (!pin) {
+      return res.status(404).json({ message: "Pin not found" });
+    }
+    
+    res.status(200).json(pin);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+
+
+
+
+
+
+
+
+
 // ---------- DELETE a Pin (only owner) ----------
 router.delete("/:id", protect, async (req, res) => {
   try {
