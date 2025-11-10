@@ -31,6 +31,7 @@ import notificationRoutes from "./routes/notificationRoutes.js";
 import feedRoutes from "./routes/feedRoutes.js";
 import profileRoutes from "./routes/profileRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
+import userRoutes from  "./routes/userRoute.js";
 // Route usage
 app.use("/api/auth", authRoutes);
 app.use("/api/pins", pinRoutes);
@@ -42,7 +43,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/feed", feedRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/search", searchRoutes);
-
+app.use("/api/user", userRoutes);
 // Root test route
 app.get("/", (req, res) => {
   res.send("✅ Pinterest Backend Running...");
