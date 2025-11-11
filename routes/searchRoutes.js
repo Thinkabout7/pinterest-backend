@@ -16,11 +16,11 @@ router.get("/", async (req, res) => {
     // Case-insensitive regex search
     const pinResults = await Pin.find({
       title: { $regex: query, $options: "i" },
-    }).populate("user", "username avatar");
+    }).populate("user", "username profilePicture");
 
     const userResults = await User.find({
       username: { $regex: query, $options: "i" },
-    }).select("username avatar email");
+    }).select("username profilePicture email");
 
     res.status(200).json({
       query,

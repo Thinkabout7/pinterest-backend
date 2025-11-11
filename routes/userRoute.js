@@ -3,6 +3,7 @@ import express from "express";
 import User from "../models/User.js";
 import Pin from "../models/Pin.js";
 import Board from "../models/Board.js";
+import SavedPin from "../models/SavedPin.js";
 import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -87,6 +88,24 @@ router.get("/:username/boards", async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.status(200).json(boards);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
+// Get user's saved pins ----------
+router.get("/:username/saved-pins", async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const savedPins = await SavedPin.find({ user: user._id })
+      .populate("pin")
+      .sort({ savedAt: -1 });
+
+    const pins = savedPins.map(saved => saved.pin);
+
+    res.status(200).json(pins);
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }

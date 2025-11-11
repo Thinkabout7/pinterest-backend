@@ -39,7 +39,7 @@ router.post("/", protect, upload.single("media"), async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const pins = await Pin.find()
-      .populate("user", "username email avatar") // show user info
+      .populate("user", "username email profilePicture") // show user info
       .sort({ createdAt: -1 });
     res.status(200).json(pins);
   } catch (error) {
@@ -73,7 +73,7 @@ router.put("/:id", protect, async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const pin = await Pin.findById(req.params.id)
-      .populate("user", "username email avatar");
+      .populate("user", "username email profilePicture");
     
     if (!pin) {
       return res.status(404).json({ message: "Pin not found" });

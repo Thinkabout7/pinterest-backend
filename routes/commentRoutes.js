@@ -33,7 +33,7 @@ router.post("/:pinId", protect, async (req, res) => {
       });
     }
 
-    const populated = await comment.populate("user", "username email avatar");
+    const populated = await comment.populate("user", "username email profilePicture");
     res.status(201).json(populated);
   } catch (err) {
     console.error("Comment create error:", err);
@@ -45,7 +45,7 @@ router.post("/:pinId", protect, async (req, res) => {
 router.get("/:pinId", async (req, res) => {
   try {
     const comments = await Comment.find({ pin: req.params.pinId })
-      .populate("user", "username email avatar")
+      .populate("user", "username email profilePicture")
       .sort({ createdAt: -1 });
 
     res.status(200).json(comments);

@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    avatar: {
+    profilePicture: {
       type: String, // optional profile picture
     },
     followers: [

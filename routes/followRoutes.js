@@ -74,7 +74,7 @@ router.get("/:id/followers", async (req, res) => {
   try {
     const user = await User.findById(req.params.id).populate(
       "followers",
-      "username email avatar"
+      "username email profilePicture"
     );
     if (!user) return res.status(404).json({ message: "User not found" });
 
@@ -90,7 +90,7 @@ router.get("/:id/following", async (req, res) => {
   try {
     const user = await User.findById(req.params.id).populate(
       "following",
-      "username email avatar"
+      "username email profilePicture"
     );
     if (!user) return res.status(404).json({ message: "User not found" });
 
