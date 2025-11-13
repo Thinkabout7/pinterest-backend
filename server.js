@@ -1,4 +1,5 @@
 // server.js
+//tweaking dotenv import to fix issues with ES modules
 import dotenv from "dotenv";
 dotenv.config();
 
