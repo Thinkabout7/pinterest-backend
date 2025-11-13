@@ -2,13 +2,14 @@ import express from "express";
 import Pin from "../models/Pin.js";
 import protect from "../middleware/authMiddleware.js";
 import upload from "../middleware/upload.js"; // ✅ new
+import { autoAssignCover } from "../controllers/boardController.js";
 
 const router = express.Router();
 
 // ---------- CREATE a new Pin (supports image or short video) ----------
 router.post("/", protect, upload.single("media"), async (req, res) => {
   try {
-    const { title, description, category } = req.body;
+    const { title, description, category, boardId } = req.body;
 
     // Cloudinary upload check
     if (!req.file?.path) {
@@ -25,9 +26,16 @@ router.post("/", protect, upload.single("media"), async (req, res) => {
       mediaUrl: req.file.path, // ✅ full Cloudinary URL
       mediaType,               // ✅ image or video
       user: req.user._id,
+      boardId,
     });
 
     const savedPin = await newPin.save();
+
+    // Auto-assign cover to boards if needed
+    if (boardId) {
+      await autoAssignCover(boardId, req.file.path);
+    }
+
     res.status(201).json(savedPin);
   } catch (error) {
     console.error(error);

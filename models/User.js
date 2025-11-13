@@ -20,7 +20,8 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
     profilePicture: {
-      type: String, // optional profile picture
+      type: String,
+      trim: true,
     },
     followers: [
       { type: mongoose.Schema.Types.ObjectId, ref: "User" }

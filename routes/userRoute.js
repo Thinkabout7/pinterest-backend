@@ -111,4 +111,39 @@ router.get("/:username/saved-pins", async (req, res) => {
   }
 });
 
+// Update user profile (including profile picture)
+router.put("/:id", protect, async (req, res) => {
+  try {
+    // Ensure user can only update their own profile
+    if (req.user._id.toString() !== req.params.id) {
+      return res.status(403).json({ message: "You can only update your own profile" });
+    }
+
+    const { username, email, profilePicture } = req.body;
+
+    const updateData = {};
+    if (username) updateData.username = username;
+    if (email) updateData.email = email;
+    if (profilePicture !== undefined) updateData.profilePicture = profilePicture;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Profile update error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+});
+
 export default router;

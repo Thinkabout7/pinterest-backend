@@ -30,6 +30,10 @@ const PinSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    boardId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Board",
+    },
   },
   { timestamps: true }
 );

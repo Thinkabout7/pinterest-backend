@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import Board from "../models/Board.js";
 import Pin from "../models/Pin.js";
 import protect from "../middleware/authMiddleware.js";
+import { updateBoard } from "../controllers/boardController.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -85,28 +86,34 @@ router.get("/:boardId", protect, async (req, res) => {
 });
 
 // ✏ Update a board (rename, description, or cover image)
-router.put("/:boardId", protect, upload.single("coverImage"), async (req, res) => {
+router.put("/:boardId", protect, async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const boardId = req.params.boardId;
+    const { name, description, coverImage } = req.body;
 
     const board = await Board.findOne({
-      _id: req.params.boardId,
+      _id: boardId,
       user: req.user._id,
     });
     if (!board) return res.status(404).json({ message: "Board not found" });
 
-    if (name) board.name = name;
-    if (description !== undefined) board.description = description;
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
 
-    if (req.file) {
-      board.coverImage = `/uploads/boards/${req.file.filename}`;
-    } else if (!board.coverImage && board.pins.length > 0) {
-      const firstPin = await Pin.findById(board.pins[0]);
-      if (firstPin?.mediaUrl) board.coverImage = firstPin.mediaUrl;
+    if (coverImage) {
+      updateData.coverImage = coverImage;
     }
 
-    await board.save();
-    res.status(200).json({ message: "Board updated", board });
+    const updatedBoard = await Board.findOneAndUpdate(
+      { _id: boardId, user: req.user._id },
+      updateData,
+      { new: true }
+    );
+
+    if (!updatedBoard) return res.status(404).json({ message: "Board not found" });
+
+    res.status(200).json(updatedBoard);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
