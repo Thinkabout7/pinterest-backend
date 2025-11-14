@@ -34,6 +34,14 @@ const PinSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Board",
     },
+    likesCount: {
+      type: Number,
+      default: 0,
+    },
+    commentsCount: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );

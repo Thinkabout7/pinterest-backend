@@ -6,6 +6,7 @@ import { autoAssignCover } from "../controllers/boardController.js";
 import axios from "axios";
 import Like from "../models/Like.js";
 import Notification from "../models/Notification.js";
+import Comment from "../models/Comment.js";
 
 const router = express.Router();
 
@@ -141,7 +142,7 @@ router.get("/:pinId/download", async (req, res) => {
 });
 
 // ---------- LIKE a Pin ----------
-router.post("/:pinId/like", protect, async (req, res) => {
+router.post("/:pinId/likes", protect, async (req, res) => {
   try {
     const pin = await Pin.findById(req.params.pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
@@ -150,6 +151,10 @@ router.post("/:pinId/like", protect, async (req, res) => {
     if (existing) return res.status(400).json({ message: "Already liked" });
 
     await Like.create({ user: req.user._id, pin: pin._id });
+
+    // Update likesCount
+    pin.likesCount += 1;
+    await pin.save();
 
     if (pin.user.toString() !== req.user._id.toString()) {
       await Notification.create({
@@ -161,15 +166,16 @@ router.post("/:pinId/like", protect, async (req, res) => {
       });
     }
 
-    const count = await Like.countDocuments({ pin: pin._id });
-    res.status(201).json({ success: true, liked: true, count });
+    const likes = await Like.find({ pin: pin._id }).populate("user", "_id username profilePicture");
+    const users = likes.map(like => like.user);
+    res.status(201).json({ likesCount: pin.likesCount, users });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
 // ---------- UNLIKE a Pin ----------
-router.delete("/:pinId/like", protect, async (req, res) => {
+router.delete("/:pinId/likes", protect, async (req, res) => {
   try {
     const like = await Like.findOneAndDelete({
       user: req.user._id,
@@ -178,8 +184,15 @@ router.delete("/:pinId/like", protect, async (req, res) => {
 
     if (!like) return res.status(404).json({ message: "Like not found" });
 
-    const count = await Like.countDocuments({ pin: req.params.pinId });
-    res.status(200).json({ success: true, liked: false, count });
+    const pin = await Pin.findById(req.params.pinId);
+    if (pin.likesCount > 0) {
+      pin.likesCount -= 1;
+      await pin.save();
+    }
+
+    const likes = await Like.find({ pin: pin._id }).populate("user", "_id username profilePicture");
+    const users = likes.map(like => like.user);
+    res.status(200).json({ likesCount: pin.likesCount, users });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -188,10 +201,79 @@ router.delete("/:pinId/like", protect, async (req, res) => {
 // ---------- GET Users Who Liked a Pin ----------
 router.get("/:pinId/likes", async (req, res) => {
   try {
-    const likes = await Like.find({ pin: req.params.pinId }).populate("user", "username profilePicture");
+    const pin = await Pin.findById(req.params.pinId);
+    if (!pin) return res.status(404).json({ message: "Pin not found" });
+
+    const likes = await Like.find({ pin: pin._id }).populate("user", "_id username profilePicture");
     const users = likes.map(like => like.user);
-    const count = users.length;
-    res.status(200).json({ count, users });
+    res.status(200).json({ likesCount: pin.likesCount, users });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- CREATE a Comment ----------
+router.post("/:pinId/comments", protect, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ message: "Comment text is required" });
+
+    const pin = await Pin.findById(req.params.pinId);
+    if (!pin) return res.status(404).json({ message: "Pin not found" });
+
+    const comment = await Comment.create({
+      text,
+      user: req.user._id,
+      pin: pin._id,
+    });
+
+    // Update commentsCount
+    pin.commentsCount += 1;
+    await pin.save();
+
+    const populatedComment = await Comment.findById(comment._id).populate("user", "_id username profilePicture");
+    res.status(201).json(populatedComment);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- GET Comments for a Pin ----------
+router.get("/:pinId/comments", async (req, res) => {
+  try {
+    const pin = await Pin.findById(req.params.pinId);
+    if (!pin) return res.status(404).json({ message: "Pin not found" });
+
+    const comments = await Comment.find({ pin: pin._id }).populate("user", "_id username profilePicture").sort({ createdAt: 1 });
+    res.status(200).json(comments);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- DELETE a Comment ----------
+router.delete("/comments/:commentId", protect, async (req, res) => {
+  try {
+    const comment = await Comment.findById(req.params.commentId);
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
+
+    const pin = await Pin.findById(comment.pin);
+    if (!pin) return res.status(404).json({ message: "Pin not found" });
+
+    // Allow deletion if user is comment owner or pin owner
+    if (comment.user.toString() !== req.user._id.toString() && pin.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to delete this comment" });
+    }
+
+    await Comment.findByIdAndDelete(req.params.commentId);
+
+    // Update commentsCount
+    if (pin.commentsCount > 0) {
+      pin.commentsCount -= 1;
+      await pin.save();
+    }
+
+    res.status(200).json({ message: "Comment deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
