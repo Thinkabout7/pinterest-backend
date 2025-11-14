@@ -109,11 +109,13 @@ router.put("/:boardId", protect, async (req, res) => {
       { _id: boardId, user: req.user._id },
       updateData,
       { new: true }
-    );
+    )
+      .populate("pins")
+      .populate("user");
 
     if (!updatedBoard) return res.status(404).json({ message: "Board not found" });
 
-    res.status(200).json(updatedBoard);
+    res.status(200).json({ board: updatedBoard });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

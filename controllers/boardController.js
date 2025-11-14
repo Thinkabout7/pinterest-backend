@@ -47,7 +47,7 @@ export const updateBoard = async (req, res) => {
       .populate("pins")
       .populate("user");
 
-    return res.status(200).json(updatedBoard);
+    return res.status(200).json({ board: updatedBoard });
   } catch (error) {
     return res.status(500).json({
       message: "Server error",
