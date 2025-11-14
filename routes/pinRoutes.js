@@ -99,7 +99,43 @@ router.get("/:id", async (req, res) => {
 
 
 
+// ---------- GET FULL PIN (Pin + Likes + Comments) ----------
+router.get("/:id/full", async (req, res) => {
+  try {
+    const pin = await Pin.findById(req.params.id)
+      .populate("user", "_id username profilePicture")
+      .lean();
 
+    if (!pin) {
+      return res.status(404).json({ message: "Pin not found" });
+    }
+
+    const likes = await Like.find({ pin: pin._id })
+      .populate("user", "_id username profilePicture")
+      .lean();
+
+    const likesUsers = likes.map((l) => l.user);
+    const likesCount = likesUsers.length;
+
+    const comments = await Comment.find({ pin: pin._id })
+      .populate("user", "_id username profilePicture")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const commentsCount = comments.length;
+
+    res.status(200).json({
+      ...pin,
+      likesUsers,
+      likesCount,
+      comments,
+      commentsCount,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
+  }
+});
 
 
 
