@@ -4,6 +4,8 @@ import protect from "../middleware/authMiddleware.js";
 import upload from "../middleware/upload.js"; // ✅ new
 import { autoAssignCover } from "../controllers/boardController.js";
 import axios from "axios";
+import Like from "../models/Like.js";
+import Notification from "../models/Notification.js";
 
 const router = express.Router();
 
@@ -133,6 +135,63 @@ router.get("/:pinId/download", async (req, res) => {
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     response.data.pipe(res);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- LIKE a Pin ----------
+router.post("/:pinId/like", protect, async (req, res) => {
+  try {
+    const pin = await Pin.findById(req.params.pinId);
+    if (!pin) return res.status(404).json({ message: "Pin not found" });
+
+    const existing = await Like.findOne({ user: req.user._id, pin: pin._id });
+    if (existing) return res.status(400).json({ message: "Already liked" });
+
+    await Like.create({ user: req.user._id, pin: pin._id });
+
+    if (pin.user.toString() !== req.user._id.toString()) {
+      await Notification.create({
+        recipient: pin.user,
+        sender: req.user._id,
+        type: "like",
+        pin: pin._id,
+        message: `${req.user.username} liked your pin "${pin.title}".`,
+      });
+    }
+
+    const count = await Like.countDocuments({ pin: pin._id });
+    res.status(201).json({ success: true, liked: true, count });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- UNLIKE a Pin ----------
+router.delete("/:pinId/like", protect, async (req, res) => {
+  try {
+    const like = await Like.findOneAndDelete({
+      user: req.user._id,
+      pin: req.params.pinId,
+    });
+
+    if (!like) return res.status(404).json({ message: "Like not found" });
+
+    const count = await Like.countDocuments({ pin: req.params.pinId });
+    res.status(200).json({ success: true, liked: false, count });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- GET Users Who Liked a Pin ----------
+router.get("/:pinId/likes", async (req, res) => {
+  try {
+    const likes = await Like.find({ pin: req.params.pinId }).populate("user", "username profilePicture");
+    const users = likes.map(like => like.user);
+    const count = users.length;
+    res.status(200).json({ count, users });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
