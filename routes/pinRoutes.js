@@ -3,6 +3,7 @@ import Pin from "../models/Pin.js";
 import protect from "../middleware/authMiddleware.js";
 import upload from "../middleware/upload.js"; // ✅ new
 import { autoAssignCover } from "../controllers/boardController.js";
+import axios from "axios";
 
 const router = express.Router();
 
@@ -114,6 +115,24 @@ router.delete("/:id", protect, async (req, res) => {
 
     await pin.deleteOne();
     res.status(200).json({ message: "Pin deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ---------- DOWNLOAD Pin Image ----------
+router.get("/:pinId/download", async (req, res) => {
+  try {
+    const pin = await Pin.findById(req.params.pinId);
+    if (!pin) return res.status(404).json({ message: "Pin not found" });
+
+    const response = await axios.get(pin.mediaUrl, { responseType: 'stream' });
+    const contentType = pin.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+    const filename = `pin-${pin._id}.${pin.mediaType === 'video' ? 'mp4' : 'jpg'}`;
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    response.data.pipe(res);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
