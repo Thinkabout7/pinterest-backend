@@ -73,4 +73,26 @@ router.delete("/:id", protect, async (req, res) => {
   }
 });
 
+// -----------------------------------------------
+// 🔥 COMPATIBILITY ALIAS ROUTES FOR FRONTEND
+// -----------------------------------------------
+
+// Frontend calls: POST /api/pins/:pinId/comment
+router.post("/pins/:pinId/comment", protect, async (req, res, next) => {
+  req.url = `/${req.params.pinId}`;
+  router.handle(req, res, next);
+});
+
+// Frontend calls: GET /api/pins/:pinId/comment
+router.get("/pins/:pinId/comment", async (req, res, next) => {
+  req.url = `/${req.params.pinId}`;
+  router.handle(req, res, next);
+});
+
+// Frontend calls: DELETE /api/pins/:pinId/comment/:commentId (optional)
+router.delete("/pins/:pinId/comment/:commentId", protect, async (req, res, next) => {
+  req.url = `/${req.params.commentId}`;
+  router.handle(req, res, next);
+});
+
 export default router;

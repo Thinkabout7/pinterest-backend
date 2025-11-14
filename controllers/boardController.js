@@ -42,12 +42,15 @@ export const updateBoard = async (req, res) => {
 
     await board.save();
 
-    // ⭐ IMPORTANT: Return FULL board object — NOT { message, board }
+    // ⭐ IMPORTANT: Return FULL board object
     const updatedBoard = await Board.findById(boardId)
       .populate("pins")
       .populate("user");
 
-    return res.status(200).json({ board: updatedBoard });
+    return res.status(200).json({
+      message: "Board updated successfully",
+      board: updatedBoard,
+    });
   } catch (error) {
     return res.status(500).json({
       message: "Server error",
