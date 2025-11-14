@@ -64,6 +64,18 @@ router.get("/:pinId", async (req, res) => {
   }
 });
 
+// 👥 Get users who liked a pin
+router.get("/:pinId/users", async (req, res) => {
+  try {
+    const likes = await Like.find({ pin: req.params.pinId }).populate("user", "username email profilePicture");
+    const users = likes.map(like => like.user);
+    res.status(200).json(users);
+  } catch (err) {
+    console.error("Get likers error:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // -----------------------------------------------
 // 🔥 COMPATIBILITY ALIAS ROUTES FOR FRONTEND
 // -----------------------------------------------
