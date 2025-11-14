@@ -3,27 +3,23 @@ import User from "../models/User.js";
 
 export const updateProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const updates = {};
 
     if (req.body.profilePicture !== undefined) {
-      user.profilePicture = req.body.profilePicture;
+      updates.profilePicture = req.body.profilePicture; // "" clears image
     }
 
-    await user.save();
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      updates,
+      { new: true }
+    );
 
-    res.json({
+    return res.status(200).json({
       message: "Profile updated",
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        profilePicture: user.profilePicture,
-      },
+      user: updatedUser,
     });
-
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
 };
