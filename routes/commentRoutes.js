@@ -31,7 +31,7 @@ const optionalAuth = async (req, _res, next) => {
 router.post("/", protect, createComment);
 
 // Get comments for a pin
-router.get("/:pinId", optionalAuth, getCommentsForPin);
+router.get("/list/:pinId", optionalAuth, getCommentsForPin);
 
 // Delete comment
 router.delete("/:id", protect, deleteComment);

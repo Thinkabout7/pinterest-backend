@@ -34,7 +34,6 @@ connectDB();
 // --- Route imports ---
 import authRoutes from "./routes/authRoutes.js";
 import pinRoutes from "./routes/pinRoutes.js";
-import commentRoutes from "./routes/commentRoutes.js";
 import likeRoutes from "./routes/likeRoutes.js";
 import boardRoutes from "./routes/boardRoutes.js";
 import followRoutes from "./routes/followRoutes.js";
@@ -49,7 +48,6 @@ import uploadRoutes from "./routes/uploadRoutes.js";
 // --- Route usage ---
 app.use("/api/auth", authRoutes);
 app.use("/api/pins", pinRoutes);
-app.use("/api/comments", commentRoutes);
 app.use("/api/likes", likeRoutes);
 app.use("/api/boards", boardRoutes);
 app.use("/api/follow", followRoutes);
