@@ -3,15 +3,10 @@ import express from "express";
 import protect from "../middleware/authMiddleware.js";
 import {
   createComment,
-  createReply,
   getCommentsForPin,
   deleteComment,
-} from "../controllers/commentController.js";
-import {
   likeComment,
-  unlikeComment,
-  getCommentLikes,
-} from "../controllers/commentLikeController.js";
+} from "../controllers/commentController.js";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
