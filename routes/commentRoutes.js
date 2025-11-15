@@ -1,98 +1,28 @@
-// routes/commentRoutes.js
 import express from "express";
-import Comment from "../models/Comment.js";
-import Pin from "../models/Pin.js";
 import protect from "../middleware/authMiddleware.js";
-import Notification from "../models/Notification.js";
+import {
+  createComment,
+  getCommentsForPin,
+  deleteComment,
+  likeComment,
+  unlikeComment,
+} from "../controllers/commentController.js";
 
 const router = express.Router();
 
-// 📝 Create comment on a Pin
-router.post("/:pinId", protect, async (req, res) => {
-  try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ message: "Text is required" });
+// POST /api/pins/:pinId/comments - Create a comment or reply
+router.post("/:pinId/comments", protect, createComment);
 
-    const pin = await Pin.findById(req.params.pinId);
-    if (!pin) return res.status(404).json({ message: "Pin not found" });
+// GET /api/pins/:pinId/comments - Get comments for a pin with replies
+router.get("/:pinId/comments", getCommentsForPin);
 
-    const comment = await Comment.create({
-      text,
-      user: req.user._id,
-      pin: pin._id,
-    });
+// DELETE /api/pins/comments/:commentId - Delete a comment
+router.delete("/comments/:commentId", protect, deleteComment);
 
-    // 🔔 Notify pin owner
-    if (pin.user.toString() !== req.user._id.toString()) {
-      await Notification.create({
-        recipient: pin.user,
-        sender: req.user._id,
-        type: "comment",
-        pin: pin._id,
-        message: `${req.user.username} commented on your pin "${pin.title}".`,
-      });
-    }
+// POST /api/pins/comments/:commentId/likes - Like a comment
+router.post("/comments/:commentId/likes", protect, likeComment);
 
-    const populated = await comment.populate("user", "username email profilePicture");
-    res.status(201).json(populated);
-  } catch (err) {
-    console.error("Comment create error:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// 💬 Get all comments for a Pin
-router.get("/:pinId", async (req, res) => {
-  try {
-    const comments = await Comment.find({ pin: req.params.pinId })
-      .populate("user", "username email profilePicture")
-      .sort({ createdAt: -1 });
-
-    res.status(200).json(comments);
-  } catch (err) {
-    console.error("Comment fetch error:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// ❌ Delete comment (only owner)
-router.delete("/:id", protect, async (req, res) => {
-  try {
-    const comment = await Comment.findById(req.params.id);
-    if (!comment) return res.status(404).json({ message: "Comment not found" });
-
-    if (comment.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    await comment.deleteOne();
-    res.status(200).json({ message: "Comment deleted successfully" });
-  } catch (err) {
-    console.error("Comment delete error:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// -----------------------------------------------
-// 🔥 COMPATIBILITY ALIAS ROUTES FOR FRONTEND
-// -----------------------------------------------
-
-// Frontend calls: POST /api/pins/:pinId/comment
-router.post("/pins/:pinId/comment", protect, async (req, res, next) => {
-  req.url = `/${req.params.pinId}`;
-  router.handle(req, res, next);
-});
-
-// Frontend calls: GET /api/pins/:pinId/comment
-router.get("/pins/:pinId/comment", async (req, res, next) => {
-  req.url = `/${req.params.pinId}`;
-  router.handle(req, res, next);
-});
-
-// Frontend calls: DELETE /api/pins/:pinId/comment/:commentId (optional)
-router.delete("/pins/:pinId/comment/:commentId", protect, async (req, res, next) => {
-  req.url = `/${req.params.commentId}`;
-  router.handle(req, res, next);
-});
+// DELETE /api/pins/comments/:commentId/likes - Unlike a comment
+router.delete("/comments/:commentId/likes", protect, unlikeComment);
 
 export default router;
