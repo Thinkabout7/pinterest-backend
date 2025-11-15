@@ -1,5 +1,5 @@
-import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
+import Comment from "../models/Comment.js";
 
 export const likeComment = async (req, res) => {
   try {
@@ -14,9 +14,7 @@ export const likeComment = async (req, res) => {
     comment.likesCount += 1;
     await comment.save();
 
-    const likes = await CommentLike.find({ comment: comment._id }).populate("user", "_id username profilePicture");
-    const users = likes.map(like => like.user);
-    res.status(201).json({ likesCount: comment.likesCount, users });
+    res.status(201).json({ message: "Comment liked" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -37,9 +35,7 @@ export const unlikeComment = async (req, res) => {
       await comment.save();
     }
 
-    const likes = await CommentLike.find({ comment: comment._id }).populate("user", "_id username profilePicture");
-    const users = likes.map(like => like.user);
-    res.status(200).json({ likesCount: comment.likesCount, users });
+    res.status(200).json({ message: "Comment unliked" });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

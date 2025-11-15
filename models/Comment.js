@@ -1,4 +1,3 @@
-// models/Comment.js
 import mongoose from "mongoose";
 
 const commentSchema = new mongoose.Schema(
@@ -14,18 +13,18 @@ const commentSchema = new mongoose.Schema(
       ref: "Pin",
       required: true,
     },
-    parentCommentId: {
+    parentComment: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Comment",
       default: null,
     },
-    likes: [
+    replies: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Comment",
       },
     ],
-    likeCount: {
+    likesCount: {
       type: Number,
       default: 0,
     },
