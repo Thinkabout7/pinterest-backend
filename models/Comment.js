@@ -1,10 +1,13 @@
-
-//models/Comment.js
+// models/Comment.js
 import mongoose from "mongoose";
 
 const commentSchema = new mongoose.Schema(
   {
-    text: { type: String, required: true, trim: true },
+    text: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -15,11 +18,13 @@ const commentSchema = new mongoose.Schema(
       ref: "Pin",
       required: true,
     },
+    // null = top-level comment
     parentComment: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Comment",
       default: null,
     },
+    // for fast population of first-level replies
     replies: [
       {
         type: mongoose.Schema.Types.ObjectId,

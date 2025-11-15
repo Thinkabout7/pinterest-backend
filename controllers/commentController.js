@@ -1,28 +1,62 @@
-
-//commentController.js
+// controllers/commentController.js
 import Comment from "../models/Comment.js";
+import CommentLike from "../models/CommentLike.js";
 import Pin from "../models/Pin.js";
+
+// helper: build nested tree from flat list
+const buildCommentTree = (flatComments) => {
+  const map = new Map();
+  const roots = [];
+
+  flatComments.forEach((c) => {
+    map.set(String(c._id), { ...c, replies: [] });
+  });
+
+  map.forEach((comment) => {
+    if (comment.parentComment) {
+      const parent = map.get(String(comment.parentComment));
+      if (parent) {
+        parent.replies.push(comment);
+      }
+    } else {
+      roots.push(comment);
+    }
+  });
+
+  return roots;
+};
 
 export const createComment = async (req, res) => {
   try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ message: "Comment text is required" });
+    const { text, pinId } = req.body;
 
-    const pin = await Pin.findById(req.params.pinId);
+    if (!text || !pinId) {
+      return res
+        .status(400)
+        .json({ message: "Text and pinId are required for a comment" });
+    }
+
+    const pin = await Pin.findById(pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
     const comment = await Comment.create({
       text,
       user: req.user._id,
       pin: pin._id,
+      parentComment: null,
     });
 
     pin.commentsCount += 1;
     await pin.save();
 
-    const populatedComment = await Comment.findById(comment._id).populate("user", "username profilePicture");
-    res.status(201).json(populatedComment);
+    const populated = await Comment.findById(comment._id).populate(
+      "user",
+      "_id username profilePicture"
+    );
+
+    return res.status(201).json(populated);
   } catch (error) {
+    console.error("createComment error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -30,10 +64,18 @@ export const createComment = async (req, res) => {
 export const createReply = async (req, res) => {
   try {
     const { text } = req.body;
-    if (!text) return res.status(400).json({ message: "Reply text is required" });
+    const { commentId } = req.params;
 
-    const parentComment = await Comment.findById(req.params.commentId);
-    if (!parentComment) return res.status(404).json({ message: "Parent comment not found" });
+    if (!text) {
+      return res
+        .status(400)
+        .json({ message: "Reply text is required" });
+    }
+
+    const parentComment = await Comment.findById(commentId);
+    if (!parentComment) {
+      return res.status(404).json({ message: "Parent comment not found" });
+    }
 
     const reply = await Comment.create({
       text,
@@ -45,9 +87,21 @@ export const createReply = async (req, res) => {
     parentComment.replies.push(reply._id);
     await parentComment.save();
 
-    const populatedReply = await Comment.findById(reply._id).populate("user", "username profilePicture");
-    res.status(201).json(populatedReply);
+    // increment pin.commentsCount for replies as well
+    const pin = await Pin.findById(parentComment.pin);
+    if (pin) {
+      pin.commentsCount += 1;
+      await pin.save();
+    }
+
+    const populated = await Comment.findById(reply._id).populate(
+      "user",
+      "_id username profilePicture"
+    );
+
+    return res.status(201).json(populated);
   } catch (error) {
+    console.error("createReply error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -57,16 +111,16 @@ export const getCommentsForPin = async (req, res) => {
     const pin = await Pin.findById(req.params.pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
-    const comments = await Comment.find({ pin: pin._id, parentComment: null })
-      .populate("user", "username profilePicture")
-      .populate({
-        path: "replies",
-        populate: { path: "user", select: "username profilePicture" },
-      })
-      .sort({ createdAt: 1 });
+    const flatComments = await Comment.find({ pin: pin._id })
+      .populate("user", "_id username profilePicture")
+      .sort({ createdAt: 1 })
+      .lean();
 
-    res.status(200).json(comments);
+    const tree = buildCommentTree(flatComments);
+
+    return res.status(200).json({ comments: tree });
   } catch (error) {
+    console.error("getCommentsForPin error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -79,26 +133,62 @@ export const deleteComment = async (req, res) => {
     const pin = await Pin.findById(comment.pin);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
-    if (comment.user.toString() !== req.user._id.toString() && pin.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to delete this comment" });
+    // only comment owner or pin owner can delete
+    if (
+      String(comment.user) !== String(req.user._id) &&
+      String(pin.user) !== String(req.user._id)
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to delete this comment" });
     }
 
-    if (comment.parentComment) {
-      // Remove from parent's replies
-      await Comment.findByIdAndUpdate(comment.parentComment, { $pull: { replies: comment._id } });
-    } else {
-      // Top-level comment, decrement pin.commentsCount
-      if (pin.commentsCount > 0) {
-        pin.commentsCount -= 1;
-        await pin.save();
+    // find all descendants (comment + nested replies)
+    const allComments = await Comment.find({ pin: pin._id }).select(
+      "_id parentComment"
+    );
+    const toDelete = new Set([String(comment._id)]);
+
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const c of allComments) {
+        if (
+          c.parentComment &&
+          toDelete.has(String(c.parentComment)) &&
+          !toDelete.has(String(c._id))
+        ) {
+          toDelete.add(String(c._id));
+          changed = true;
+        }
       }
     }
 
-    // Delete the comment and its replies
-    await Comment.deleteMany({ $or: [{ _id: comment._id }, { parentComment: comment._id }] });
+    const idsArray = Array.from(toDelete);
 
-    res.status(200).json({ message: "Comment deleted successfully" });
+    // delete likes for all those comments
+    await CommentLike.deleteMany({ comment: { $in: idsArray } });
+
+    // delete comments
+    await Comment.deleteMany({ _id: { $in: idsArray } });
+
+    // remove from parent's replies if needed
+    if (comment.parentComment) {
+      await Comment.findByIdAndUpdate(comment.parentComment, {
+        $pull: { replies: comment._id },
+      });
+    }
+
+    // reduce pin.commentsCount but not below 0
+    const deleteCount = idsArray.length;
+    pin.commentsCount = Math.max(0, pin.commentsCount - deleteCount);
+    await pin.save();
+
+    return res
+      .status(200)
+      .json({ message: "Comment and its replies deleted" });
   } catch (error) {
+    console.error("deleteComment error:", error);
     res.status(500).json({ message: error.message });
   }
 };

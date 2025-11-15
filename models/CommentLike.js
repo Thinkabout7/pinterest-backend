@@ -1,6 +1,4 @@
-
-//models/CommentLike.js
-
+// models/CommentLike.js
 import mongoose from "mongoose";
 
 const commentLikeSchema = new mongoose.Schema(
@@ -19,6 +17,7 @@ const commentLikeSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// one like per (user, comment)
 commentLikeSchema.index({ user: 1, comment: 1 }, { unique: true });
 
 export default mongoose.model("CommentLike", commentLikeSchema);

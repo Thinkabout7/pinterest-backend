@@ -45,6 +45,7 @@ import searchRoutes from "./routes/searchRoutes.js";
 import userRoutes from "./routes/userRoute.js";
 import SavedPinRoutes from "./routes/SavedPinRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
+
 // --- Route usage ---
 app.use("/api/auth", authRoutes);
 app.use("/api/pins", pinRoutes);
