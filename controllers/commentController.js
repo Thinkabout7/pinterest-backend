@@ -106,29 +106,40 @@ export const getCommentsForPin = async (req, res) => {
       likedIds = new Set(likes.map((l) => l.comment.toString()));
     }
 
-    // Build map and initialise replies array
+    // Build map with depth limit to 3 levels
     const map = new Map();
     allComments.forEach((c) => {
       map.set(c._id.toString(), {
-        ...c,
+        _id: c._id,
+        text: c.text,
+        user: c.user,
+        replyToUsername: c.replyToUser ? c.replyToUser.username : null,
         isLiked: likedIds.has(c._id.toString()),
+        likesCount: c.likesCount,
+        createdAt: c.createdAt,
         replies: [],
+        depth: 0, // will set properly
       });
     });
 
     const roots = [];
 
-    // Attach each comment to its parent (if any)
+    // Attach each comment to its parent (if any), limiting depth to 3
     map.forEach((comment) => {
       if (comment.parentComment) {
         const parent = map.get(comment.parentComment.toString());
-        if (parent) {
+        if (parent && parent.depth < 3) {
+          comment.depth = parent.depth + 1;
           parent.replies.push(comment);
-        } // if parent missing, we just skip
+        } // if parent missing or depth exceeded, skip
       } else {
+        comment.depth = 0;
         roots.push(comment);
       }
     });
+
+    // Sort roots by newest first
+    roots.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     res.status(200).json({ comments: roots });
   } catch (error) {
