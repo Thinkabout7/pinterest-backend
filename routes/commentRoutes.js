@@ -33,7 +33,7 @@ const optionalAuth = async (req, _res, next) => {
 };
 
 // Create top-level comment
-router.post("/", protect, createComment);
+router.post("/:pinId", protect, createComment);
 
 // Create reply to any comment
 router.post("/reply/:commentId", protect, createReply);

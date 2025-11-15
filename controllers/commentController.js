@@ -6,10 +6,11 @@ import Pin from "../models/Pin.js";
 // Create top-level comment
 export const createComment = async (req, res) => {
   try {
-    const { text, pinId } = req.body;
+    const { text } = req.body;
+    const { pinId } = req.params;
 
-    if (!text || !pinId) {
-      return res.status(400).json({ message: "Text and pinId are required" });
+    if (!text) {
+      return res.status(400).json({ message: "Text is required" });
     }
 
     const pin = await Pin.findById(pinId);
@@ -55,6 +56,7 @@ export const createReply = async (req, res) => {
       user: req.user._id,
       pin: parentComment.pin,
       parentComment: parentComment._id,
+      replyToUser: parentComment.user,
     });
 
     const populatedReply = await Comment.findById(reply._id).populate(
@@ -86,6 +88,7 @@ export const getCommentsForPin = async (req, res) => {
     // Load all comments for this pin
     const allComments = await Comment.find({ pin: pin._id })
       .populate("user", "username profilePicture")
+      .populate("replyToUser", "username")
       .sort({ createdAt: 1 })
       .lean();
 
