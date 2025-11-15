@@ -1,7 +1,8 @@
+// routes/pinRoutes.js
 import express from "express";
 import Pin from "../models/Pin.js";
 import protect from "../middleware/authMiddleware.js";
-import upload from "../middleware/upload.js"; // ✅ new
+import upload from "../middleware/upload.js";
 import { autoAssignCover } from "../controllers/boardController.js";
 import axios from "axios";
 import Like from "../models/Like.js";
@@ -21,27 +22,26 @@ router.post("/", protect, upload.single("media"), async (req, res) => {
   try {
     const { title, description, category, boardId } = req.body;
 
-    // Cloudinary upload check
     if (!req.file?.path) {
-      return res.status(400).json({ message: "Media file is required (image or video)" });
+      return res
+        .status(400)
+        .json({ message: "Media file is required (image or video)" });
     }
 
-    // Detect file type
     const mediaType = /^video\//i.test(req.file.mimetype) ? "video" : "image";
 
     const newPin = new Pin({
       title,
       description,
       category,
-      mediaUrl: req.file.path, // ✅ full Cloudinary URL
-      mediaType,               // ✅ image or video
+      mediaUrl: req.file.path,
+      mediaType,
       user: req.user._id,
       boardId,
     });
 
     const savedPin = await newPin.save();
 
-    // Auto-assign cover to boards if needed
     if (boardId) {
       await autoAssignCover(boardId, req.file.path);
     }
@@ -57,7 +57,7 @@ router.post("/", protect, upload.single("media"), async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const pins = await Pin.find()
-      .populate("user", "username email profilePicture") // show user info
+      .populate("user", "username email profilePicture")
       .sort({ createdAt: -1 });
     res.status(200).json(pins);
   } catch (error) {
@@ -90,22 +90,22 @@ router.put("/:id", protect, async (req, res) => {
 // ---------- GET single Pin by ID ----------
 router.get("/:id", async (req, res) => {
   try {
-    const pin = await Pin.findById(req.params.id)
-      .populate("user", "username email profilePicture");
-    
+    const pin = await Pin.findById(req.params.id).populate(
+      "user",
+      "username email profilePicture"
+    );
+
     if (!pin) {
       return res.status(404).json({ message: "Pin not found" });
     }
-    
+
     res.status(200).json(pin);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-
-
-// ---------- GET FULL PIN (Pin + Likes + Comments) ----------
+// ---------- GET FULL PIN (Pin + Likes + Comments flat) ----------
 router.get("/:id/full", async (req, res) => {
   try {
     const pin = await Pin.findById(req.params.id)
@@ -143,11 +143,6 @@ router.get("/:id/full", async (req, res) => {
   }
 });
 
-
-
-
-
-
 // ---------- DELETE a Pin (only owner) ----------
 router.delete("/:id", protect, async (req, res) => {
   try {
@@ -171,12 +166,18 @@ router.get("/:pinId/download", async (req, res) => {
     const pin = await Pin.findById(req.params.pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
-    const response = await axios.get(pin.mediaUrl, { responseType: 'stream' });
-    const contentType = pin.mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
-    const filename = `pin-${pin._id}.${pin.mediaType === 'video' ? 'mp4' : 'jpg'}`;
+    const response = await axios.get(pin.mediaUrl, { responseType: "stream" });
+    const contentType =
+      pin.mediaType === "video" ? "video/mp4" : "image/jpeg";
+    const filename = `pin-${pin._id}.${
+      pin.mediaType === "video" ? "mp4" : "jpg"
+    }`;
 
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${filename}"`
+    );
     response.data.pipe(res);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -194,7 +195,6 @@ router.post("/:pinId/likes", protect, async (req, res) => {
 
     await Like.create({ user: req.user._id, pin: pin._id });
 
-    // Update likesCount
     pin.likesCount += 1;
     await pin.save();
 
@@ -208,8 +208,11 @@ router.post("/:pinId/likes", protect, async (req, res) => {
       });
     }
 
-    const likes = await Like.find({ pin: pin._id }).populate("user", "_id username profilePicture");
-    const users = likes.map(like => like.user);
+    const likes = await Like.find({ pin: pin._id }).populate(
+      "user",
+      "_id username profilePicture"
+    );
+    const users = likes.map((like) => like.user);
     res.status(201).json({ likesCount: pin.likesCount, users });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -232,27 +235,20 @@ router.delete("/:pinId/likes", protect, async (req, res) => {
       await pin.save();
     }
 
-    const likes = await Like.find({ pin: pin._id }).populate("user", "_id username profilePicture");
-    const users = likes.map(like => like.user);
+    const likes = await Like.find({ pin: pin._id }).populate(
+      "user",
+      "_id username profilePicture"
+    );
+    const users = likes.map((like) => like.user);
     res.status(200).json({ likesCount: pin.likesCount, users });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// ---------- GET Users Who Liked a Pin ----------
-router.get("/:pinId/likes", async (req, res) => {
-  try {
-    const pin = await Pin.findById(req.params.pinId);
-    if (!pin) return res.status(404).json({ message: "Pin not found" });
-
-    const likes = await Like.find({ pin: pin._id }).populate("user", "_id username profilePicture");
-    const users = likes.map(like => like.user);
-    res.status(200).json({ likesCount: pin.likesCount, users });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+//
+// ====== COMMENTS (PINS) ======
+//
 
 // ---------- CREATE a Comment or Reply ----------
 router.post("/:pinId/comments", protect, async (req, res) => {
@@ -273,20 +269,22 @@ router.post("/:pinId/comments", protect, async (req, res) => {
       pin: pin._id,
     };
 
-    // If parentCommentId present → this is a reply
     if (parentCommentId) {
       const parent = await Comment.findById(parentCommentId);
       if (!parent) {
         return res.status(400).json({ message: "Parent comment not found" });
       }
+      // link reply to parent
       commentData.parentComment = parent._id;
     }
 
     const comment = await Comment.create(commentData);
 
-    // Update commentsCount on pin (includes replies)
-    pin.commentsCount += 1;
-    await pin.save();
+    // Only count top-level comments in pin.commentsCount
+    if (!parentCommentId) {
+      pin.commentsCount += 1;
+      await pin.save();
+    }
 
     const populatedComment = await Comment.findById(comment._id).populate(
       "user",
@@ -300,20 +298,45 @@ router.post("/:pinId/comments", protect, async (req, res) => {
   }
 });
 
-// ---------- GET Comments for a Pin ----------
+// ---------- GET Comments for a Pin (top-level + nested replies) ----------
 router.get("/:pinId/comments", async (req, res) => {
   try {
     const pin = await Pin.findById(req.params.pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
-    const comments = await Comment.find({ pin: pin._id }).populate("user", "_id username profilePicture").sort({ createdAt: 1 });
-    res.status(200).json(comments);
+    const allComments = await Comment.find({ pin: pin._id })
+      .populate("user", "_id username profilePicture")
+      .sort({ createdAt: 1 })
+      .lean();
+
+    // Build map and replies
+    const commentMap = new Map();
+    const topLevel = [];
+
+    // Initialize replies array on each comment
+    for (const c of allComments) {
+      c.replies = [];
+      commentMap.set(c._id.toString(), c);
+    }
+
+    for (const c of allComments) {
+      if (c.parentComment) {
+        const parent = commentMap.get(c.parentComment.toString());
+        if (parent) {
+          parent.replies.push(c);
+        }
+      } else {
+        topLevel.push(c);
+      }
+    }
+
+    res.status(200).json(topLevel);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// ---------- DELETE a Comment ----------
+// ---------- DELETE a Comment (top-level or reply) ----------
 router.delete("/comments/:commentId", protect, async (req, res) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
@@ -322,28 +345,40 @@ router.delete("/comments/:commentId", protect, async (req, res) => {
     const pin = await Pin.findById(comment.pin);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
-    // Allow deletion if user is comment owner or pin owner
-    if (comment.user.toString() !== req.user._id.toString() && pin.user.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to delete this comment" });
+    // Only comment owner or pin owner can delete
+    if (
+      comment.user.toString() !== req.user._id.toString() &&
+      pin.user.toString() !== req.user._id.toString()
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not authorized to delete this comment" });
     }
 
-    // If top-level comment, delete replies too
-    let deletedCount = 1;
+    // If top-level comment: delete its replies + all likes
     if (!comment.parentComment) {
       const replies = await Comment.find({ parentComment: comment._id });
-      deletedCount += replies.length;
-      await Comment.deleteMany({ parentComment: comment._id });
-    }
+      const replyIds = replies.map((r) => r._id);
 
-    // Delete comment likes
-    await CommentLike.deleteMany({ comment: comment._id });
+      // delete likes for main + replies
+      await CommentLike.deleteMany({
+        comment: { $in: [comment._id, ...replyIds] },
+      });
 
-    await Comment.findByIdAndDelete(req.params.commentId);
+      // delete comments (main + replies)
+      await Comment.deleteMany({
+        $or: [{ _id: comment._id }, { parentComment: comment._id }],
+      });
 
-    // Update commentsCount
-    if (pin.commentsCount >= deletedCount) {
-      pin.commentsCount -= deletedCount;
-      await pin.save();
+      // decrease comment count (only top-level counted)
+      if (pin.commentsCount > 0) {
+        pin.commentsCount -= 1;
+        await pin.save();
+      }
+    } else {
+      // It's a reply: delete only this comment + its likes
+      await CommentLike.deleteMany({ comment: comment._id });
+      await Comment.findByIdAndDelete(comment._id);
     }
 
     res.status(200).json({ message: "Comment deleted successfully" });

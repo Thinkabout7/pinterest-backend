@@ -1,3 +1,6 @@
+
+//models/CommentLike.js
+
 import mongoose from "mongoose";
 
 const commentLikeSchema = new mongoose.Schema(
