@@ -7,6 +7,12 @@ import axios from "axios";
 import Like from "../models/Like.js";
 import Notification from "../models/Notification.js";
 import Comment from "../models/Comment.js";
+import CommentLike from "../models/CommentLike.js";
+import {
+  likeComment,
+  unlikeComment,
+  getCommentLikes,
+} from "../controllers/commentLikeController.js";
 
 const router = express.Router();
 
@@ -122,7 +128,7 @@ router.get("/:id/full", async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    const commentsCount = comments.length;
+    const commentsCount = pin.commentsCount;
 
     res.status(200).json({
       ...pin,
@@ -248,28 +254,48 @@ router.get("/:pinId/likes", async (req, res) => {
   }
 });
 
-// ---------- CREATE a Comment ----------
+// ---------- CREATE a Comment or Reply ----------
 router.post("/:pinId/comments", protect, async (req, res) => {
   try {
-    const { text } = req.body;
-    if (!text) return res.status(400).json({ message: "Comment text is required" });
+    const { text, parentCommentId } = req.body;
+    if (!text) {
+      return res.status(400).json({ message: "Comment text is required" });
+    }
 
     const pin = await Pin.findById(req.params.pinId);
-    if (!pin) return res.status(404).json({ message: "Pin not found" });
+    if (!pin) {
+      return res.status(404).json({ message: "Pin not found" });
+    }
 
-    const comment = await Comment.create({
+    const commentData = {
       text,
       user: req.user._id,
       pin: pin._id,
-    });
+    };
 
-    // Update commentsCount
+    // If parentCommentId present → this is a reply
+    if (parentCommentId) {
+      const parent = await Comment.findById(parentCommentId);
+      if (!parent) {
+        return res.status(400).json({ message: "Parent comment not found" });
+      }
+      commentData.parentComment = parent._id;
+    }
+
+    const comment = await Comment.create(commentData);
+
+    // Update commentsCount on pin (includes replies)
     pin.commentsCount += 1;
     await pin.save();
 
-    const populatedComment = await Comment.findById(comment._id).populate("user", "_id username profilePicture");
+    const populatedComment = await Comment.findById(comment._id).populate(
+      "user",
+      "_id username profilePicture"
+    );
+
     res.status(201).json(populatedComment);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -301,11 +327,22 @@ router.delete("/comments/:commentId", protect, async (req, res) => {
       return res.status(403).json({ message: "Not authorized to delete this comment" });
     }
 
+    // If top-level comment, delete replies too
+    let deletedCount = 1;
+    if (!comment.parentComment) {
+      const replies = await Comment.find({ parentComment: comment._id });
+      deletedCount += replies.length;
+      await Comment.deleteMany({ parentComment: comment._id });
+    }
+
+    // Delete comment likes
+    await CommentLike.deleteMany({ comment: comment._id });
+
     await Comment.findByIdAndDelete(req.params.commentId);
 
     // Update commentsCount
-    if (pin.commentsCount > 0) {
-      pin.commentsCount -= 1;
+    if (pin.commentsCount >= deletedCount) {
+      pin.commentsCount -= deletedCount;
       await pin.save();
     }
 
@@ -314,5 +351,14 @@ router.delete("/comments/:commentId", protect, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+// ---------- LIKE a Comment ----------
+router.post("/comments/:commentId/likes", protect, likeComment);
+
+// ---------- UNLIKE a Comment ----------
+router.delete("/comments/:commentId/likes", protect, unlikeComment);
+
+// ---------- GET Comment Reactions (who liked this comment) ----------
+router.get("/comments/:commentId/likes", getCommentLikes);
 
 export default router;
