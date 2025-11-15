@@ -17,7 +17,7 @@ const commentLikeSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// one like per (user, comment)
+// 1 like per user per comment
 commentLikeSchema.index({ user: 1, comment: 1 }, { unique: true });
 
 export default mongoose.model("CommentLike", commentLikeSchema);

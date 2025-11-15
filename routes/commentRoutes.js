@@ -12,22 +12,39 @@ import {
   unlikeComment,
   getCommentLikes,
 } from "../controllers/commentLikeController.js";
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
 const router = express.Router();
 
-// list comments for a pin (nested tree)
-router.get("/list/:pinId", getCommentsForPin);
+// optional auth (for list route – so we can mark isLiked if logged in)
+const optionalAuth = async (req, _res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    try {
+      const token = authHeader.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = await User.findById(decoded.id).select("-password");
+    } catch (err) {
+      // ignore invalid token
+    }
+  }
+  next();
+};
 
-// create top-level comment
+// Create top-level comment
 router.post("/", protect, createComment);
 
-// create reply to any comment
+// Create reply to any comment
 router.post("/reply/:commentId", protect, createReply);
 
-// delete comment + replies
+// Get comments for a pin (tree)
+router.get("/list/:pinId", optionalAuth, getCommentsForPin);
+
+// Delete comment or reply
 router.delete("/:commentId", protect, deleteComment);
 
-// like / unlike / list likes
+// Like / Unlike / Get likes for a comment
 router.post("/like/:commentId", protect, likeComment);
 router.delete("/like/:commentId", protect, unlikeComment);
 router.get("/likes/:commentId", getCommentLikes);

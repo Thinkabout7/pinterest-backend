@@ -13,23 +13,23 @@ export const likeComment = async (req, res) => {
     });
 
     if (existing) {
-      return res.status(400).json({ message: "Already liked" });
+      // already liked → just return current state (idempotent)
+      return res.status(200).json({
+        message: "Already liked",
+        likesCount: comment.likesCount,
+      });
     }
 
-    await CommentLike.create({
-      user: req.user._id,
-      comment: comment._id,
-    });
+    await CommentLike.create({ user: req.user._id, comment: comment._id });
 
     comment.likesCount += 1;
     await comment.save();
 
-    return res.status(201).json({
+    res.status(201).json({
       message: "Comment liked",
       likesCount: comment.likesCount,
     });
   } catch (error) {
-    console.error("likeComment error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -42,7 +42,8 @@ export const unlikeComment = async (req, res) => {
     });
 
     if (!like) {
-      return res.status(404).json({ message: "Like not found" });
+      // nothing to unlike → ok but no change
+      return res.status(200).json({ message: "Not liked yet" });
     }
 
     const comment = await Comment.findById(req.params.commentId);
@@ -51,12 +52,11 @@ export const unlikeComment = async (req, res) => {
       await comment.save();
     }
 
-    return res.status(200).json({
+    res.status(200).json({
       message: "Comment unliked",
       likesCount: comment ? comment.likesCount : 0,
     });
   } catch (error) {
-    console.error("unlikeComment error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -73,12 +73,11 @@ export const getCommentLikes = async (req, res) => {
 
     const users = likes.map((like) => like.user);
 
-    return res.status(200).json({
+    res.status(200).json({
       likesCount: comment.likesCount,
       users,
     });
   } catch (error) {
-    console.error("getCommentLikes error:", error);
     res.status(500).json({ message: error.message });
   }
 };
