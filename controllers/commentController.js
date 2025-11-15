@@ -6,11 +6,10 @@ import Pin from "../models/Pin.js";
 // Create top-level comment
 export const createComment = async (req, res) => {
   try {
-    const { text } = req.body;
-    const { pinId } = req.params;
+    const { text, pinId } = req.body;
 
-    if (!text) {
-      return res.status(400).json({ message: "Text is required" });
+    if (!text || !pinId) {
+      return res.status(400).json({ message: "Text and pinId are required" });
     }
 
     const pin = await Pin.findById(pinId);
@@ -58,6 +57,10 @@ export const createReply = async (req, res) => {
       parentComment: parentComment._id,
       replyToUser: parentComment.user,
     });
+
+    // Push reply to parentComment.replies
+    parentComment.replies.push(reply._id);
+    await parentComment.save();
 
     const populatedReply = await Comment.findById(reply._id).populate(
       "user",
@@ -163,6 +166,13 @@ export const deleteComment = async (req, res) => {
       );
       children.forEach((ch) => idsToDelete.push(ch._id));
       idx++;
+    }
+
+    // Remove from parentComment.replies if it's a reply
+    if (comment.parentComment) {
+      await Comment.findByIdAndUpdate(comment.parentComment, {
+        $pull: { replies: comment._id },
+      });
     }
 
     // delete comments and their likes

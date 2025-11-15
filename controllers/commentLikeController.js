@@ -15,7 +15,7 @@ export const likeComment = async (req, res) => {
     if (existing) {
       // already liked → just return current state (idempotent)
       return res.status(200).json({
-        message: "Already liked",
+        success: true,
         likesCount: comment.likesCount,
       });
     }
@@ -26,7 +26,7 @@ export const likeComment = async (req, res) => {
     await comment.save();
 
     res.status(201).json({
-      message: "Comment liked",
+      success: true,
       likesCount: comment.likesCount,
     });
   } catch (error) {
@@ -53,7 +53,7 @@ export const unlikeComment = async (req, res) => {
     }
 
     res.status(200).json({
-      message: "Comment unliked",
+      success: true,
       likesCount: comment ? comment.likesCount : 0,
     });
   } catch (error) {
