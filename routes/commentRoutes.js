@@ -32,21 +32,16 @@ const optionalAuth = async (req, _res, next) => {
   next();
 };
 
-// Create top-level comment
+// Create comment or reply
 router.post("/", protect, createComment);
 
-// Create reply to any comment
-router.post("/reply/:commentId", protect, createReply);
+// Get comments for a pin
+router.get("/:pinId", optionalAuth, getCommentsForPin);
 
-// Get comments for a pin (tree)
-router.get("/list/:pinId", optionalAuth, getCommentsForPin);
+// Delete comment
+router.delete("/:id", protect, deleteComment);
 
-// Delete comment or reply
-router.delete("/:commentId", protect, deleteComment);
-
-// Like / Unlike / Get likes for a comment
-router.post("/like/:commentId", protect, likeComment);
-router.delete("/like/:commentId", protect, unlikeComment);
-router.get("/likes/:commentId", getCommentLikes);
+// Like / Unlike comment
+router.patch("/:commentId/like", protect, likeComment);
 
 export default router;

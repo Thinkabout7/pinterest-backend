@@ -3,45 +3,32 @@ import mongoose from "mongoose";
 
 const commentSchema = new mongoose.Schema(
   {
-    text: { type: String, required: true, trim: true },
-
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-
-    pin: {
+    pinId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Pin",
       required: true,
     },
-
-    // null for top-level comment, set for replies
-    parentComment: {
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    text: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    parentCommentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Comment",
       default: null,
     },
-
-    // will be filled only when we build the tree in code
-    replies: [
+    likes: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Comment",
+        ref: "User",
       },
     ],
-
-    likesCount: {
-      type: Number,
-      default: 0,
-    },
-
-    replyToUser: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
   },
   { timestamps: true }
 );

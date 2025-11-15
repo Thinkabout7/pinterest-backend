@@ -1,32 +1,32 @@
 // controllers/commentController.js
 import Comment from "../models/Comment.js";
-import CommentLike from "../models/CommentLike.js";
 import Pin from "../models/Pin.js";
 
-// Create top-level comment
+// Create comment or reply
 export const createComment = async (req, res) => {
   try {
-    const { text, pinId } = req.body;
+    const { pinId, text, parentCommentId } = req.body;
 
-    if (!text || !pinId) {
-      return res.status(400).json({ message: "Text and pinId are required" });
+    if (!pinId || !text) {
+      return res.status(400).json({ message: "pinId and text are required" });
     }
 
     const pin = await Pin.findById(pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
     const comment = await Comment.create({
+      pinId,
+      userId: req.user._id,
       text,
-      user: req.user._id,
-      pin: pin._id,
-      parentComment: null,
+      parentCommentId: parentCommentId || null,
     });
 
-    pin.commentsCount += 1;
-    await pin.save();
+    // Update comment count
+    const totalCount = await Comment.countDocuments({ pinId });
+    await Pin.findByIdAndUpdate(pinId, { commentsCount: totalCount });
 
     const populatedComment = await Comment.findById(comment._id).populate(
-      "user",
+      "userId",
       "username profilePicture"
     );
 
@@ -36,51 +36,7 @@ export const createComment = async (req, res) => {
   }
 };
 
-// Create reply to ANY comment (top-level or reply)
-export const createReply = async (req, res) => {
-  try {
-    const { text } = req.body;
-    const { commentId } = req.params;
-
-    if (!text) {
-      return res.status(400).json({ message: "Reply text is required" });
-    }
-
-    const parentComment = await Comment.findById(commentId);
-    if (!parentComment)
-      return res.status(404).json({ message: "Parent comment not found" });
-
-    const reply = await Comment.create({
-      text,
-      user: req.user._id,
-      pin: parentComment.pin,
-      parentComment: parentComment._id,
-      replyToUser: parentComment.user,
-    });
-
-    // Push reply to parentComment.replies
-    parentComment.replies.push(reply._id);
-    await parentComment.save();
-
-    const populatedReply = await Comment.findById(reply._id).populate(
-      "user",
-      "username profilePicture"
-    );
-
-    // increase pin comment count
-    const pin = await Pin.findById(parentComment.pin);
-    if (pin) {
-      pin.commentsCount += 1;
-      await pin.save();
-    }
-
-    res.status(201).json(populatedReply);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Get all comments for a pin as a tree (with replies)
+// Get comments for a pin
 export const getCommentsForPin = async (req, res) => {
   try {
     const { pinId } = req.params;
@@ -88,113 +44,130 @@ export const getCommentsForPin = async (req, res) => {
     const pin = await Pin.findById(pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
-    // Load all comments for this pin
-    const allComments = await Comment.find({ pin: pin._id })
-      .populate("user", "username profilePicture")
-      .populate("replyToUser", "username")
+    // Get all comments for the pin
+    const allComments = await Comment.find({ pinId })
+      .populate("userId", "username profilePicture")
       .sort({ createdAt: 1 })
       .lean();
 
-    // Find which ones current user liked (if logged in)
-    let likedIds = new Set();
-    if (req.user) {
-      const likes = await CommentLike.find({
-        user: req.user._id,
-        comment: { $in: allComments.map((c) => c._id) },
-      }).lean();
+    // Build tree
+    const commentMap = new Map();
+    const mainComments = [];
 
-      likedIds = new Set(likes.map((l) => l.comment.toString()));
-    }
-
-    // Build map with depth limit to 3 levels
-    const map = new Map();
-    allComments.forEach((c) => {
-      map.set(c._id.toString(), {
-        _id: c._id,
-        text: c.text,
-        user: c.user,
-        replyToUsername: c.replyToUser ? c.replyToUser.username : null,
-        isLiked: likedIds.has(c._id.toString()),
-        likesCount: c.likesCount,
-        createdAt: c.createdAt,
+    allComments.forEach((comment) => {
+      const commentObj = {
+        _id: comment._id,
+        text: comment.text,
+        user: comment.userId,
+        likesCount: comment.likes.length,
+        isLiked: req.user ? comment.likes.includes(req.user._id.toString()) : false,
+        createdAt: comment.createdAt,
         replies: [],
-        depth: 0, // will set properly
-      });
-    });
+      };
 
-    const roots = [];
+      commentMap.set(comment._id.toString(), commentObj);
 
-    // Attach each comment to its parent (if any), limiting depth to 3
-    map.forEach((comment) => {
-      if (comment.parentComment) {
-        const parent = map.get(comment.parentComment.toString());
-        if (parent && parent.depth < 3) {
-          comment.depth = parent.depth + 1;
-          parent.replies.push(comment);
-        } // if parent missing or depth exceeded, skip
-      } else {
-        comment.depth = 0;
-        roots.push(comment);
+      if (!comment.parentCommentId) {
+        mainComments.push(commentObj);
       }
     });
 
-    // Sort roots by newest first
-    roots.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Attach replies
+    allComments.forEach((comment) => {
+      if (comment.parentCommentId) {
+        const parent = commentMap.get(comment.parentCommentId.toString());
+        if (parent) {
+          const replyObj = commentMap.get(comment._id.toString());
+          replyObj.parentUsername = parent.user.username;
+          replyObj.parentUserId = parent.user._id;
+          parent.replies.push(replyObj);
+        }
+      }
+    });
 
-    res.status(200).json({ comments: roots });
+    // Sort main comments by newest first
+    mainComments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Sort replies by oldest first
+    mainComments.forEach((main) => {
+      main.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    });
+
+    const totalCount = allComments.length;
+
+    res.status(200).json({ mainComments, totalCount });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// Delete a comment or reply (and all its children)
+// Delete comment
 export const deleteComment = async (req, res) => {
   try {
-    const comment = await Comment.findById(req.params.commentId);
+    const { id } = req.params;
+
+    const comment = await Comment.findById(id);
     if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    const pin = await Pin.findById(comment.pin);
+    const pin = await Pin.findById(comment.pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
     // Only comment owner or pin owner
     if (
-      comment.user.toString() !== req.user._id.toString() &&
+      comment.userId.toString() !== req.user._id.toString() &&
       pin.user.toString() !== req.user._id.toString()
     ) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to delete this comment" });
+      return res.status(403).json({ message: "Not authorized" });
     }
 
-    // collect this comment + all descendants
-    const idsToDelete = [comment._id];
+    // Collect all descendants
+    const idsToDelete = [id];
     let idx = 0;
 
     while (idx < idsToDelete.length) {
       const children = await Comment.find(
-        { parentComment: idsToDelete[idx] },
+        { parentCommentId: idsToDelete[idx] },
         "_id"
       );
       children.forEach((ch) => idsToDelete.push(ch._id));
       idx++;
     }
 
-    // Remove from parentComment.replies if it's a reply
-    if (comment.parentComment) {
-      await Comment.findByIdAndUpdate(comment.parentComment, {
-        $pull: { replies: comment._id },
-      });
+    // Delete all
+    await Comment.deleteMany({ _id: { $in: idsToDelete } });
+
+    // Update comment count
+    const totalCount = await Comment.countDocuments({ pinId: comment.pinId });
+    await Pin.findByIdAndUpdate(comment.pinId, { commentsCount: totalCount });
+
+    res.status(200).json({ message: "Comment deleted" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Like / Unlike comment
+export const likeComment = async (req, res) => {
+  try {
+    const { commentId } = req.params;
+
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
+
+    const userIdStr = req.user._id.toString();
+    const likes = comment.likes.map((id) => id.toString());
+
+    if (likes.includes(userIdStr)) {
+      // Unlike
+      comment.likes = comment.likes.filter((id) => id.toString() !== userIdStr);
+    } else {
+      // Like
+      comment.likes.push(req.user._id);
     }
 
-    // delete comments and their likes
-    await Comment.deleteMany({ _id: { $in: idsToDelete } });
-    await CommentLike.deleteMany({ comment: { $in: idsToDelete } });
+    await comment.save();
 
-    // decrease pin.commentsCount
-    pin.commentsCount = Math.max(0, pin.commentsCount - idsToDelete.length);
-    await pin.save();
-
-    res.status(200).json({ message: "Comment deleted successfully" });
+    res.status(200).json({ likesCount: comment.likes.length });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
