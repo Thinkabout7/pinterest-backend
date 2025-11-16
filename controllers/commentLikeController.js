@@ -2,21 +2,21 @@
 import CommentLike from "../models/CommentLike.js";
 import Comment from "../models/Comment.js";
 
-// 👍 Like a comment (idempotent — cannot double-like)
+// LIKE (idempotent)
 export const likeComment = async (req, res) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
     if (!comment)
       return res.status(404).json({ message: "Comment not found" });
 
-    // check if user already liked
+    if (comment.likesCount == null) comment.likesCount = 0;
+
     const existing = await CommentLike.findOne({
       user: req.user._id,
       comment: comment._id,
     });
 
     if (existing) {
-      // already liked → return current state
       return res.status(200).json({
         success: true,
         likesCount: comment.likesCount,
@@ -24,7 +24,6 @@ export const likeComment = async (req, res) => {
       });
     }
 
-    // create like entry
     await CommentLike.create({
       user: req.user._id,
       comment: comment._id,
@@ -43,7 +42,7 @@ export const likeComment = async (req, res) => {
   }
 };
 
-// 👍 Unlike a comment
+// UNLIKE
 export const unlikeComment = async (req, res) => {
   try {
     const removed = await CommentLike.findOneAndDelete({
@@ -52,15 +51,19 @@ export const unlikeComment = async (req, res) => {
     });
 
     const comment = await Comment.findById(req.params.commentId);
+    if (!comment)
+      return res.status(404).json({ message: "Comment not found" });
 
-    if (removed && comment && comment.likesCount > 0) {
-      comment.likesCount -= 1;
+    if (comment.likesCount == null) comment.likesCount = 0;
+
+    if (removed) {
+      comment.likesCount = Math.max(0, comment.likesCount - 1);
       await comment.save();
     }
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      likesCount: comment?.likesCount || 0,
+      likesCount: comment.likesCount,
       isLiked: false,
     });
   } catch (error) {
@@ -68,18 +71,16 @@ export const unlikeComment = async (req, res) => {
   }
 };
 
-// 👍 List users who reacted
+// GET list of users who reacted
 export const getCommentLikes = async (req, res) => {
   try {
     const list = await CommentLike.find({
       comment: req.params.commentId,
     }).populate("user", "_id username profilePicture");
 
-    const users = list.map((like) => like.user);
+    const users = list.map((l) => l.user);
 
-    res.status(200).json({
-      users,
-    });
+    res.status(200).json({ users });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

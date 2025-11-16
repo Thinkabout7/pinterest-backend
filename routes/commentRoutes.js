@@ -1,3 +1,4 @@
+// routes/commentRoutes.js
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
 
@@ -15,22 +16,22 @@ import {
 
 const router = express.Router();
 
-// Create a comment
+// create comment or reply
 router.post("/", protect, createComment);
 
-// Get comments for a pin
+// get threaded comments
 router.get("/list/:pinId", getCommentsForPin);
 
-// Delete a comment
+// delete comment
 router.delete("/:id", protect, deleteComment);
 
-// Like a comment
+// like comment
 router.post("/:commentId/like", protect, likeComment);
 
-// Unlike a comment
+// unlike comment
 router.delete("/:commentId/like", protect, unlikeComment);
 
-// Get users who liked a comment
+// list users who reacted
 router.get("/:commentId/likes", getCommentLikes);
 
 export default router;

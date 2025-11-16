@@ -1,13 +1,12 @@
-//commentCotrooler..js
+// controllers/commentController.js
 import Comment from "../models/Comment.js";
-import Pin from "../models/Pin.js";
 
 // CREATE comment or reply
 export const createComment = async (req, res) => {
   try {
     const { pinId, text, parentCommentId } = req.body;
 
-    if (!text.trim())
+    if (!text || !text.trim())
       return res.status(400).json({ message: "Text required" });
 
     const comment = await Comment.create({
@@ -15,6 +14,7 @@ export const createComment = async (req, res) => {
       userId: req.user._id,
       text,
       parentCommentId: parentCommentId || null,
+      likesCount: 0,
     });
 
     const populated = await Comment.findById(comment._id).populate(
@@ -36,7 +36,6 @@ export const getCommentsForPin = async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    // Convert to threaded tree...
     const map = {};
     const main = [];
 
@@ -45,27 +44,20 @@ export const getCommentsForPin = async (req, res) => {
         _id: c._id,
         text: c.text,
         user: c.userId,
-        likesCount: c.likesCount,
+        likesCount: c.likesCount || 0,
         isLiked: false,
         createdAt: c.createdAt,
         replies: [],
       };
     });
 
-    // mark isLiked
-    const userId = req.user?._id?.toString();
-    if (userId) {
-      list.forEach((c) => {
-        // check if user liked via CommentLike model?
-        // frontend does this separately anyway, so skip
-      });
-    }
-
     list.forEach((c) => {
       if (c.parentCommentId) {
-        map[c.parentCommentId]?.replies?.push(map[c._id]);
+        if (map[c.parentCommentId]) {
+          map[c.parentCommentId].replies.push(map[c._id]);
+        }
       } else {
-      main.push(map[c._id]);
+        main.push(map[c._id]);
       }
     });
 
@@ -75,7 +67,7 @@ export const getCommentsForPin = async (req, res) => {
   }
 };
 
-// DELETE
+// DELETE comment
 export const deleteComment = async (req, res) => {
   try {
     await Comment.findByIdAndDelete(req.params.id);
