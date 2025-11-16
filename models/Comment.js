@@ -23,12 +23,12 @@ const commentSchema = new mongoose.Schema(
       ref: "Comment",
       default: null,
     },
-    likes: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
+
+    // ❗ we use likesCount instead of likes[]
+    likesCount: {
+      type: Number,
+      default: 0,
+    },
   },
   { timestamps: true }
 );
