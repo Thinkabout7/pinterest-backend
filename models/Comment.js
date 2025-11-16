@@ -1,4 +1,3 @@
-// models/Comment.js
 import mongoose from "mongoose";
 
 const commentSchema = new mongoose.Schema(
@@ -24,7 +23,7 @@ const commentSchema = new mongoose.Schema(
       default: null,
     },
 
-    // ❗ we use likesCount instead of likes[]
+    // ❗ SYSTEM B: we DO NOT store user IDs here
     likesCount: {
       type: Number,
       default: 0,
