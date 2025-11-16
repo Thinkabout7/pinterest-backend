@@ -1,11 +1,10 @@
-// commentRoutes.js
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
+
 import {
   createComment,
   getCommentsForPin,
   deleteComment,
-  likeComment as likeA,
 } from "../controllers/commentController.js";
 
 import {
@@ -16,27 +15,22 @@ import {
 
 const router = express.Router();
 
-// create comment
+// Create a comment
 router.post("/", protect, createComment);
 
-// get comments
+// Get comments for a pin
 router.get("/list/:pinId", getCommentsForPin);
 
-// delete comment
+// Delete a comment
 router.delete("/:id", protect, deleteComment);
 
-/* ------------------------------------------
-   LIKE SYSTEM — FIXED (supports BOTH)
-------------------------------------------- */
-
-// FRONTEND EXPECTS THIS:
-router.patch("/:commentId/like", protect, likeA);
-
-// SYSTEM B — ALSO KEEP THESE:
+// Like a comment
 router.post("/:commentId/like", protect, likeComment);
+
+// Unlike a comment
 router.delete("/:commentId/like", protect, unlikeComment);
 
-// get list of users who reacted
+// Get users who liked a comment
 router.get("/:commentId/likes", getCommentLikes);
 
 export default router;
