@@ -9,11 +9,23 @@ export const createComment = async (req, res) => {
     if (!text || !text.trim())
       return res.status(400).json({ message: "Text required" });
 
+    let replyToUsername = null;
+
+    // If replying → find parent to extract username
+    if (parentCommentId) {
+      const parent = await Comment.findById(parentCommentId).populate(
+        "userId",
+        "username"
+      );
+      if (parent) replyToUsername = parent.userId.username;
+    }
+
     const comment = await Comment.create({
       pinId,
       userId: req.user._id,
       text,
       parentCommentId: parentCommentId || null,
+      replyToUsername: replyToUsername || null,
       likesCount: 0,
     });
 
@@ -48,6 +60,8 @@ export const getCommentsForPin = async (req, res) => {
         isLiked: false,
         createdAt: c.createdAt,
         replies: [],
+        parentCommentId: c.parentCommentId || null,
+        replyToUsername: c.replyToUsername || null,
       };
     });
 
