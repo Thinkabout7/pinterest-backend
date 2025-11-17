@@ -1,161 +1,25 @@
+// routes/commentRoutes.js
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
-import Comment from "../models/Comment.js";
-import CommentLike from "../models/CommentLike.js";
+import {
+  createComment,
+  getCommentsForPin,
+  deleteComment,
+  toggleLike,
+} from "../controllers/commentController.js";
 
 const router = express.Router();
 
-// create comment or reply
-router.post("/", protect, async (req, res) => {
-  try {
-    const { pinId, text, parentCommentId } = req.body;
+// Create comment or reply
+router.post("/", protect, createComment);
 
-    if (!text || !text.trim())
-      return res.status(400).json({ message: "Text required" });
+// Get threaded comments for a pin
+router.get("/pin/:pinId", protect, getCommentsForPin);
 
-    const comment = await Comment.create({
-      pin: pinId,
-      user: req.user._id,
-      text,
-      replyToUser: parentCommentId ? (await Comment.findById(parentCommentId)).user : null,
-    });
+// Delete comment + all its replies
+router.delete("/:id", protect, deleteComment);
 
-    const populated = await Comment.findById(comment._id)
-      .populate("user", "username profilePicture")
-      .populate("replyToUser", "username");
-
-    res.status(201).json({
-      _id: populated._id,
-      text: populated.text,
-      user: populated.user,
-      replyToUsername: populated.replyToUser ? populated.replyToUser.username : null,
-      createdAt: populated.createdAt,
-    });
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-});
-
-// get threaded comments
-router.get("/list/:pinId", async (req, res) => {
-  try {
-    const list = await Comment.find({ pin: req.params.pinId })
-      .populate("user", "username profilePicture")
-      .populate("replyToUser", "username")
-      .sort({ createdAt: 1 })
-      .lean();
-
-    const map = {};
-    const main = [];
-
-    list.forEach((c) => {
-      map[c._id] = {
-        _id: c._id,
-        text: c.text,
-        user: c.user,
-        likesCount: c.likesCount || 0,
-        isLiked: false,
-        createdAt: c.createdAt,
-        replies: [],
-        replyToUsername: c.replyToUser ? c.replyToUser.username : null,
-      };
-    });
-
-    list.forEach((c) => {
-      if (c.replies && c.replies.length > 0) {
-        c.replies.forEach((replyId) => {
-          if (map[replyId]) {
-            map[c._id].replies.push(map[replyId]);
-          }
-        });
-      } else if (!c.replyToUser) {
-        main.push(map[c._id]);
-      }
-    });
-
-    res.status(200).json({ comments: main, totalCount: list.length });
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-});
-
-// delete comment
-router.delete("/:id", protect, async (req, res) => {
-  try {
-    await Comment.findByIdAndDelete(req.params.id);
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-});
-
-// like comment
-router.post("/:commentId/like", protect, async (req, res) => {
-  try {
-    const comment = await Comment.findById(req.params.commentId);
-    if (!comment) return res.status(404).json({ message: "Comment not found" });
-
-    const existing = await CommentLike.findOne({
-      user: req.user._id,
-      comment: comment._id,
-    });
-
-    if (existing) {
-      await CommentLike.findByIdAndDelete(existing._id);
-      comment.likesCount = Math.max(0, comment.likesCount - 1);
-      await comment.save();
-      res.json({ likesCount: comment.likesCount, isLiked: false });
-    } else {
-      await CommentLike.create({ user: req.user._id, comment: comment._id });
-      comment.likesCount += 1;
-      await comment.save();
-      res.json({ likesCount: comment.likesCount, isLiked: true });
-    }
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-});
-
-// unlike comment
-router.delete("/:commentId/like", protect, async (req, res) => {
-  try {
-    const comment = await Comment.findById(req.params.commentId);
-    if (!comment) return res.status(404).json({ message: "Comment not found" });
-
-    const existing = await CommentLike.findOne({
-      user: req.user._id,
-      comment: comment._id,
-    });
-
-    if (existing) {
-      await CommentLike.findByIdAndDelete(existing._id);
-      comment.likesCount = Math.max(0, comment.likesCount - 1);
-      await comment.save();
-      res.json({ likesCount: comment.likesCount, isLiked: false });
-    } else {
-      res.status(400).json({ message: "Like not found" });
-    }
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-});
-
-// list users who reacted
-router.get("/:commentId/likes", async (req, res) => {
-  try {
-    const comment = await Comment.findById(req.params.commentId);
-    if (!comment) return res.status(404).json({ message: "Comment not found" });
-
-    const likes = await CommentLike.find({ comment: comment._id })
-      .populate("user", "_id username profilePicture")
-      .lean();
-
-    const users = likes.map((like) => like.user);
-
-    res.status(200).json({ likesCount: comment.likesCount, users });
-  } catch (e) {
-    res.status(500).json({ message: e.message });
-  }
-});
+// Toggle like on comment
+router.post("/:commentId/like", protect, toggleLike);
 
 export default router;
