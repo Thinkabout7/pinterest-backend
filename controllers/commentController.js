@@ -52,10 +52,11 @@ export const createComment = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   GET COMMENTS FOR PIN — NEVER RETURNS user: null
+   GET COMMENTS FOR PIN — FIXED THREADING LOGIC
    -------------------------------------------------- */
 export const getCommentsForPin = async (req, res) => {
   try {
+    // 1. Get all comments from DB
     const comments = await Comment.find({ pin: req.params.pinId })
       .populate("user", "username profilePicture")
       .populate("replyToUser", "username")
@@ -63,15 +64,22 @@ export const getCommentsForPin = async (req, res) => {
       .lean();
 
     const userId = req.user?._id;
+
+    // 2. First pass — create flat map (no lost replies)
     const map = {};
-    const roots = [];
 
     for (const c of comments) {
-      const isLiked = userId ? await CommentLike.exists({ user: userId, comment: c._id }) : false;
+      const isLiked = userId
+        ? await CommentLike.exists({ user: userId, comment: c._id })
+        : false;
 
-      const safeUser = c.user || { _id: "deleted", username: "Deleted User", profilePicture: null };
+      const safeUser = c.user || {
+        _id: "deleted",
+        username: "Deleted User",
+        profilePicture: null,
+      };
 
-      const data = {
+      map[c._id] = {
         _id: c._id,
         text: c.text,
         user: safeUser,
@@ -79,15 +87,33 @@ export const getCommentsForPin = async (req, res) => {
         likesCount: c.likesCount || 0,
         isLiked: !!isLiked,
         createdAt: c.createdAt,
-        replies: [],
+        parentCommentId: c.parentCommentId || null,
+        replies: [],     // IMPORTANT FIX: always initialize replies
       };
-
-      map[c._id] = data;
-      if (!c.parentCommentId) roots.push(data);
-      else if (map[c.parentCommentId]) map[c.parentCommentId].replies.push(data);
     }
 
-    res.json({ comments: roots, totalCount: comments.length });
+    // 3. Second pass — attach replies to parents
+    const roots = [];
+
+    for (const id in map) {
+      const comment = map[id];
+      const parentId = comment.parentCommentId;
+
+      if (parentId && map[parentId]) {
+        // Valid reply → attach to parent
+        map[parentId].replies.push(comment);
+      } else {
+        // Top-level → root list
+        roots.push(comment);
+      }
+    }
+
+    // 4. return threaded list + accurate count
+    res.json({
+      comments: roots,
+      totalCount: comments.length,
+    });
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -95,7 +121,7 @@ export const getCommentsForPin = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   DELETE COMMENT + REPLIES
+   DELETE COMMENT + ITS REPLIES
    -------------------------------------------------- */
 export const deleteComment = async (req, res) => {
   try {
@@ -117,7 +143,7 @@ export const deleteComment = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   TOGGLE LIKE
+   TOGGLE LIKE ON COMMENT
    -------------------------------------------------- */
 export const toggleLike = async (req, res) => {
   try {
