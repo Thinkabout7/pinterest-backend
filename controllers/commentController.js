@@ -2,7 +2,6 @@ import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
 
 // -------------------- CREATE COMMENT OR REPLY --------------------
-//COMMENTCONTROLLER.JS
 export const createComment = async (req, res) => {
   try {
     const { pinId, text, parentCommentId } = req.body;
@@ -44,7 +43,6 @@ export const createComment = async (req, res) => {
 };
 
 // -------------------- GET COMMENTS (THREADED) --------------------
-//COMMENTCONTROLLER.JS
 export const getCommentsForPin = async (req, res) => {
   try {
     const list = await Comment.find({ pin: req.params.pinId })
@@ -56,20 +54,25 @@ export const getCommentsForPin = async (req, res) => {
     const map = {};
     const main = [];
 
-    // 1. Build comment map
-    list.forEach((c) => {
+    // -------- FIX 1: ISLIKED MUST BE REAL VALUE --------
+    for (const c of list) {
+      const isLiked = await CommentLike.exists({
+        user: req.user?._id,
+        comment: c._id,
+      });
+
       map[c._id] = {
         _id: c._id,
         text: c.text,
         user: c.user,
         likesCount: c.likesCount || 0,
-        isLiked: false,
+        isLiked: !!isLiked,
         createdAt: c.createdAt,
         replyToUsername: c.replyToUser ? c.replyToUser.username : null,
         replies: [],
         parentCommentId: c.parentCommentId || null,
       };
-    });
+    }
 
     // 2. Link replies
     list.forEach((c) => {
@@ -81,6 +84,7 @@ export const getCommentsForPin = async (req, res) => {
       }
     });
 
+    // -------- FIX 2: RETURN UPDATED COMMENT COUNT --------
     res.status(200).json({ comments: main, totalCount: list.length });
   } catch (err) {
     res.status(500).json({ message: err.message });
