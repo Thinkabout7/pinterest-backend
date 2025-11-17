@@ -143,7 +143,7 @@ export const deleteComment = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   TOGGLE LIKE ON COMMENT
+   TOGGLE LIKE ON comment so like
    -------------------------------------------------- */
 export const toggleLike = async (req, res) => {
   try {
