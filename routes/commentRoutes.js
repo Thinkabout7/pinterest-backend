@@ -17,7 +17,7 @@ const router = express.Router();
 router.post("/", protect, createComment);
 
 // GET threaded comments
-router.get("/list/:pinId", protect, getCommentsForPin);
+router.get("/list/:pinId",  getCommentsForPin);
 
 // DELETE comment
 router.delete("/:id", protect, deleteComment);
