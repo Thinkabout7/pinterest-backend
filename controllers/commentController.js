@@ -4,17 +4,19 @@ import Pin from "../models/Pin.js";
 import CommentLike from "../models/CommentLike.js";
 
 /* --------------------------------------------------
-   CREATE COMMENT OR REPLY
+   CREATE COMMENT OR REPLY  (FIXED)
    -------------------------------------------------- */
 export const createComment = async (req, res) => {
   try {
     const { pinId, text, parentCommentId } = req.body;
     if (!text?.trim()) return res.status(400).json({ message: "Text required" });
 
-    let replyToUsername = null;
+    let replyToUser = null;
+
+    // FIX: lookup parent so we store replyToUser (ObjectId)
     if (parentCommentId) {
-      const parent = await Comment.findById(parentCommentId).populate("user", "username");
-      if (parent?.user) replyToUsername = parent.user.username;
+      const parent = await Comment.findById(parentCommentId);
+      if (parent) replyToUser = parent.user;   // ObjectId (CORRECT)
     }
 
     const comment = await Comment.create({
@@ -22,13 +24,14 @@ export const createComment = async (req, res) => {
       user: req.user._id,
       text: text.trim(),
       parentCommentId: parentCommentId || null,
-      replyToUsername,
+      replyToUser,   // FIXED
     });
 
     await Pin.findByIdAndUpdate(pinId, { $inc: { commentsCount: 1 } });
 
     const populated = await Comment.findById(comment._id)
-      .populate("user", "username profilePicture");
+      .populate("user", "username profilePicture")
+      .populate("replyToUser", "username");  // show @username in frontend
 
     const safeUser = populated.user || {
       _id: "deleted",
@@ -40,7 +43,7 @@ export const createComment = async (req, res) => {
       _id: populated._id,
       text: populated.text,
       user: safeUser,
-      replyToUsername,
+      replyToUsername: populated.replyToUser?.username || null, // CLEAN
       createdAt: populated.createdAt,
       likesCount: 0,
       isLiked: false,
@@ -52,11 +55,10 @@ export const createComment = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   GET COMMENTS FOR PIN — FIXED THREADING LOGIC
+   GET COMMENTS FOR PIN — CORRECT THREADED BUILD
    -------------------------------------------------- */
 export const getCommentsForPin = async (req, res) => {
   try {
-    // 1. Get all comments from DB
     const comments = await Comment.find({ pin: req.params.pinId })
       .populate("user", "username profilePicture")
       .populate("replyToUser", "username")
@@ -64,10 +66,9 @@ export const getCommentsForPin = async (req, res) => {
       .lean();
 
     const userId = req.user?._id;
-
-    // 2. First pass — create flat map (no lost replies)
     const map = {};
 
+    // FIRST PASS: build map
     for (const c of comments) {
       const isLiked = userId
         ? await CommentLike.exists({ user: userId, comment: c._id })
@@ -88,31 +89,23 @@ export const getCommentsForPin = async (req, res) => {
         isLiked: !!isLiked,
         createdAt: c.createdAt,
         parentCommentId: c.parentCommentId || null,
-        replies: [],     // IMPORTANT FIX: always initialize replies
+        replies: [], // FIX: always initialize
       };
     }
 
-    // 3. Second pass — attach replies to parents
+    // SECOND PASS: attach replies
     const roots = [];
 
     for (const id in map) {
-      const comment = map[id];
-      const parentId = comment.parentCommentId;
-
-      if (parentId && map[parentId]) {
-        // Valid reply → attach to parent
-        map[parentId].replies.push(comment);
+      const c = map[id];
+      if (c.parentCommentId && map[c.parentCommentId]) {
+        map[c.parentCommentId].replies.push(c);
       } else {
-        // Top-level → root list
-        roots.push(comment);
+        roots.push(c);
       }
     }
 
-    // 4. return threaded list + accurate count
-    res.json({
-      comments: roots,
-      totalCount: comments.length,
-    });
+    res.json({ comments: roots, totalCount: comments.length });
 
   } catch (err) {
     console.error(err);
@@ -121,7 +114,7 @@ export const getCommentsForPin = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   DELETE COMMENT + ITS REPLIES
+   DELETE COMMENT + CHILDREN
    -------------------------------------------------- */
 export const deleteComment = async (req, res) => {
   try {
@@ -133,7 +126,11 @@ export const deleteComment = async (req, res) => {
     });
 
     await Comment.deleteMany({ _id: { $in: toDelete.map(c => c._id) } });
-    await Pin.findByIdAndUpdate(comment.pin, { $inc: { commentsCount: -toDelete.length } });
+
+    await Pin.findByIdAndUpdate(
+      comment.pin,
+      { $inc: { commentsCount: -toDelete.length } }
+    );
 
     res.json({ success: true, removed: toDelete.length });
   } catch (err) {
@@ -143,24 +140,27 @@ export const deleteComment = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   TOGGLE LIKE ON comment so like
+   TOGGLE LIKE
    -------------------------------------------------- */
 export const toggleLike = async (req, res) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
     if (!comment) return res.status(404).json({ message: "Not found" });
 
-    const existing = await CommentLike.findOne({ user: req.user._id, comment: comment._id });
+    const existing = await CommentLike.findOne({
+      user: req.user._id,
+      comment: comment._id,
+    });
 
     if (existing) {
       await CommentLike.deleteOne({ _id: existing._id });
-      comment.likesCount = Math.max(0, (comment.likesCount || 1) - 1);
+      comment.likesCount = Math.max(0, comment.likesCount - 1);
       await comment.save();
       return res.json({ likesCount: comment.likesCount, isLiked: false });
     }
 
     await CommentLike.create({ user: req.user._id, comment: comment._id });
-    comment.likesCount = (comment.likesCount || 0) + 1;
+    comment.likesCount += 1;
     await comment.save();
 
     res.json({ likesCount: comment.likesCount, isLiked: true });
