@@ -8,6 +8,7 @@ import axios from "axios";
 import Like from "../models/Like.js";
 import Notification from "../models/Notification.js";
 import Comment from "../models/Comment.js";
+import CommentLike from "../models/CommentLike.js";
 
 const router = express.Router();
 
@@ -449,37 +450,35 @@ router.post("/:pinId/comments/:commentId/reply", protect, async (req, res) => {
   }
 });
 
-// ---------- TOGGLE LIKE ON A COMMENT (LIKE / UNLIKE IN ONE ENDPOINT) ----------
+// ---------- LIKE A COMMENT ----------
 router.post("/comments/:commentId/likes", protect, async (req, res) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
     if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    if (!comment.likes) comment.likes = [];
+    const existing = await CommentLike.findOne({
+      user: req.user._id,
+      comment: comment._id,
+    });
 
-    const userIdStr = req.user._id.toString();
-    const alreadyLiked = comment.likes
-      .map((id) => id.toString())
-      .includes(userIdStr);
-
-    if (alreadyLiked) {
-      // UNLIKE
-      comment.likes = comment.likes.filter(
-        (id) => id.toString() !== userIdStr
-      );
-    } else {
-      // LIKE
-      comment.likes.push(req.user._id);
+    if (existing) {
+      return res.status(200).json({
+        success: true,
+        likesCount: comment.likes.length,
+      });
     }
 
+    await CommentLike.create({ user: req.user._id, comment: comment._id });
+
+    comment.likes.push(req.user._id);
     await comment.save();
 
-    res.status(200).json({
+    res.status(201).json({
+      success: true,
       likesCount: comment.likes.length,
-      isLiked: !alreadyLiked,
     });
   } catch (error) {
-    console.error("Toggle like comment error:", error);
+    console.error("Like comment error:", error);
     res.status(500).json({ message: error.message });
   }
 });
@@ -512,15 +511,17 @@ router.delete("/comments/:commentId/likes", protect, async (req, res) => {
 // ---------- GET USERS WHO LIKED A COMMENT ----------
 router.get("/comments/:commentId/likes", async (req, res) => {
   try {
-    const comment = await Comment.findById(req.params.commentId).populate(
-      "likes",
-      "_id username profilePicture"
-    );
+    const comment = await Comment.findById(req.params.commentId);
     if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    const users = comment.likes || [];
+    const users = await CommentLike.find({ comment: comment._id }).populate(
+      "user",
+      "_id username profilePicture"
+    ).lean();
 
-    res.status(200).json({ likesCount: users.length, users });
+    const userList = users.map((like) => like.user);
+
+    res.status(200).json({ likesCount: comment.likes.length, users: userList });
   } catch (error) {
     console.error("Get comment likes error:", error);
     res.status(500).json({ message: error.message });
