@@ -51,10 +51,12 @@ export const getCommentsForPin = async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
+    const totalCount = list.length; // ← FIXED COMMENT COUNT
+
     const map = {};
     const main = [];
 
-    // -------- FIX 1: ISLIKED MUST BE REAL VALUE --------
+    // build map with real isLiked
     for (const c of list) {
       const isLiked = await CommentLike.exists({
         user: req.user?._id,
@@ -74,7 +76,7 @@ export const getCommentsForPin = async (req, res) => {
       };
     }
 
-    // 2. Link replies
+    // link replies
     list.forEach((c) => {
       if (c.parentCommentId) {
         const parent = map[c.parentCommentId];
@@ -84,8 +86,11 @@ export const getCommentsForPin = async (req, res) => {
       }
     });
 
-    // -------- FIX 2: RETURN UPDATED COMMENT COUNT --------
-    res.status(200).json({ comments: main, totalCount: list.length });
+    res.status(200).json({
+      comments: main,
+      totalCount, // ← FIXED
+    });
+
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -114,14 +119,12 @@ export const toggleLike = async (req, res) => {
     });
 
     if (existing) {
-      // unlike
       await CommentLike.findByIdAndDelete(existing._id);
       comment.likesCount = Math.max(0, comment.likesCount - 1);
       await comment.save();
       return res.json({ likesCount: comment.likesCount, isLiked: false });
     }
 
-    // like
     await CommentLike.create({ user: req.user._id, comment: comment._id });
     comment.likesCount += 1;
     await comment.save();
