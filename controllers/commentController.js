@@ -1,5 +1,7 @@
+// controllers/commentController.js
 import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
+import Pin from "../models/Pin.js"; // ⭐ FIX: required to update commentsCount
 
 // -------------------- CREATE COMMENT OR REPLY --------------------
 export const createComment = async (req, res) => {
@@ -23,6 +25,9 @@ export const createComment = async (req, res) => {
       parentCommentId: parentCommentId || null,
       replyToUser: repliedUser,
     });
+
+    // ⭐ FIX: increment pin.commentsCount
+    await Pin.findByIdAndUpdate(pinId, { $inc: { commentsCount: 1 } });
 
     const populated = await Comment.findById(newComment._id)
       .populate("user", "username profilePicture")
@@ -51,7 +56,7 @@ export const getCommentsForPin = async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    const totalCount = list.length; // ← FIXED COMMENT COUNT
+    const totalCount = list.length;
 
     const map = {};
     const main = [];
@@ -76,7 +81,6 @@ export const getCommentsForPin = async (req, res) => {
       };
     }
 
-    // link replies
     list.forEach((c) => {
       if (c.parentCommentId) {
         const parent = map[c.parentCommentId];
@@ -88,9 +92,8 @@ export const getCommentsForPin = async (req, res) => {
 
     res.status(200).json({
       comments: main,
-      totalCount, // ← FIXED
+      totalCount,
     });
-
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -99,7 +102,14 @@ export const getCommentsForPin = async (req, res) => {
 // -------------------- DELETE COMMENT --------------------
 export const deleteComment = async (req, res) => {
   try {
+    const comment = await Comment.findById(req.params.id);
+    if (!comment) return res.status(404).json({ message: "Not found" });
+
     await Comment.findByIdAndDelete(req.params.id);
+
+    // ⭐ FIX: decrement pin.commentsCount
+    await Pin.findByIdAndUpdate(comment.pin, { $inc: { commentsCount: -1 } });
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
