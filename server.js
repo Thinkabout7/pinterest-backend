@@ -58,6 +58,7 @@ app.use("/api/search", searchRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/saved", SavedPinRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/comments", commentRoutes);
 // --- Root test route ---
 app.get("/", (req, res) => {
   res.send("✅ Pinterest Backend Running...");
