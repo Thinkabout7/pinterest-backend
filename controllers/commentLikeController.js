@@ -2,14 +2,10 @@
 import CommentLike from "../models/CommentLike.js";
 import Comment from "../models/Comment.js";
 
-// LIKE (idempotent)
 export const likeComment = async (req, res) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
-    if (!comment)
-      return res.status(404).json({ message: "Comment not found" });
-
-    if (comment.likesCount == null) comment.likesCount = 0;
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
     const existing = await CommentLike.findOne({
       user: req.user._id,
@@ -17,17 +13,14 @@ export const likeComment = async (req, res) => {
     });
 
     if (existing) {
+      // already liked → just return current state (idempotent)
       return res.status(200).json({
         success: true,
         likesCount: comment.likesCount,
-        isLiked: true,
       });
     }
 
-    await CommentLike.create({
-      user: req.user._id,
-      comment: comment._id,
-    });
+    await CommentLike.create({ user: req.user._id, comment: comment._id });
 
     comment.likesCount += 1;
     await comment.save();
@@ -35,52 +28,55 @@ export const likeComment = async (req, res) => {
     res.status(201).json({
       success: true,
       likesCount: comment.likesCount,
-      isLiked: true,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// UNLIKE
 export const unlikeComment = async (req, res) => {
   try {
-    const removed = await CommentLike.findOneAndDelete({
+    const like = await CommentLike.findOneAndDelete({
       user: req.user._id,
       comment: req.params.commentId,
     });
 
+    if (!like) {
+      // nothing to unlike → ok but no change
+      return res.status(200).json({ message: "Not liked yet" });
+    }
+
     const comment = await Comment.findById(req.params.commentId);
-    if (!comment)
-      return res.status(404).json({ message: "Comment not found" });
-
-    if (comment.likesCount == null) comment.likesCount = 0;
-
-    if (removed) {
-      comment.likesCount = Math.max(0, comment.likesCount - 1);
+    if (comment && comment.likesCount > 0) {
+      comment.likesCount -= 1;
       await comment.save();
     }
 
     res.status(200).json({
       success: true,
-      likesCount: comment.likesCount,
-      isLiked: false,
+      likesCount: comment ? comment.likesCount : 0,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-// GET list of users who reacted
 export const getCommentLikes = async (req, res) => {
   try {
-    const list = await CommentLike.find({
-      comment: req.params.commentId,
-    }).populate("user", "_id username profilePicture");
+    const comment = await Comment.findById(req.params.commentId);
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    const users = list.map((l) => l.user);
+    const likes = await CommentLike.find({ comment: comment._id }).populate(
+      "user",
+      "_id username profilePicture"
+    );
 
-    res.status(200).json({ users });
+    const users = likes.map((like) => like.user);
+
+    res.status(200).json({
+      likesCount: comment.likesCount,
+      users,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -1,44 +1,22 @@
-//models/Comment.js
+// models/CommentLike.js
 
 import mongoose from "mongoose";
 
-const commentSchema = new mongoose.Schema(
+const commentLikeSchema = new mongoose.Schema(
   {
-    pin: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Pin",
-      required: true,
-    },
-
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-
-    text: {
-      type: String,
-      required: true,
-    },
-//COMMENT.JS
-    parentCommentId: {
+    comment: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Comment",
-      default: null,
-    },
-
-    replyToUser: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
-
-    likesCount: {
-      type: Number,
-      default: 0,
+      required: true,
     },
   },
   { timestamps: true }
 );
 
-export default mongoose.model("Comment", commentSchema);
+commentLikeSchema.index({ user: 1, comment: 1 }, { unique: true });
+export default mongoose.model("CommentLike", commentLikeSchema);

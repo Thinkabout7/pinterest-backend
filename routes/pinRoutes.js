@@ -44,7 +44,7 @@ router.post("/", protect, upload.single("media"), async (req, res) => {
       category,
       mediaUrl: req.file.path,
       mediaType,
-      user: req.user._id,
+     user: req.user._id,
       boardId,
     });
 
@@ -278,5 +278,7 @@ router.get("/:pinId/likes", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+
 
 export default router;
