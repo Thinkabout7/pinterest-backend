@@ -2,28 +2,35 @@ import mongoose from "mongoose";
 
 const commentSchema = new mongoose.Schema(
   {
-    pinId: {
+    pin: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Pin",
       required: true,
     },
-    userId: {
+
+    user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
+
     text: {
       type: String,
       required: true,
-      trim: true,
     },
+//COMMENT.JS
     parentCommentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Comment",
       default: null,
     },
 
-    // ❗ SYSTEM B: we DO NOT store user IDs here
+    replyToUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
     likesCount: {
       type: Number,
       default: 0,

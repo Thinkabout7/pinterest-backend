@@ -1,37 +1,31 @@
-// routes/commentRoutes.js
+
+//routes/commentRoutes.js
 import express from "express";
 import protect from "../middleware/authMiddleware.js";
-
 import {
   createComment,
   getCommentsForPin,
   deleteComment,
+  toggleLike,
 } from "../controllers/commentController.js";
 
-import {
-  likeComment,
-  unlikeComment,
-  getCommentLikes,
-} from "../controllers/commentLikeController.js";
+import { getCommentLikes } from "../controllers/commentLikeController.js";
 
 const router = express.Router();
 
-// create comment or reply
+// CREATE comment or reply
 router.post("/", protect, createComment);
 
-// get threaded comments
+// GET threaded comments
 router.get("/list/:pinId", getCommentsForPin);
 
-// delete comment
+// DELETE comment
 router.delete("/:id", protect, deleteComment);
 
-// like comment
-router.post("/:commentId/like", protect, likeComment);
+// LIKE / UNLIKE toggle
+router.post("/:commentId/like", protect, toggleLike);
 
-// unlike comment
-router.delete("/:commentId/like", protect, unlikeComment);
-
-// list users who reacted
+// GET users who liked comment
 router.get("/:commentId/likes", getCommentLikes);
 
 export default router;

@@ -1,7 +1,6 @@
 // controllers/pinController.js
 import Pin from "../models/Pin.js";
 import Like from "../models/Like.js";
-import Comment from "../models/Comment.js";
 import Notification from "../models/Notification.js";
 import { autoAssignCover } from "./boardController.js"; // adjust path if needed
 import axios from "axios";
@@ -91,12 +90,7 @@ export const getFullPin = async (req, res) => {
     const likesCount = likesUsers.length;
 
     // Comments
-    const comments = await Comment.find({ pin: pinDoc._id })
-      .populate("user", "_id username profilePicture")
-      .sort({ createdAt: 1 })
-      .lean();
-
-    const commentsCount = comments.length;
+    const commentsCount = pinDoc.commentsCount || 0;
 
     // FINAL BIG OBJECT
     const fullPin = {
@@ -104,7 +98,6 @@ export const getFullPin = async (req, res) => {
       likesCount,
       likesUsers,
       commentsCount,
-      comments,
     };
 
     res.status(200).json(fullPin);
