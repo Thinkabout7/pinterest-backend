@@ -1,3 +1,4 @@
+// models/Comment.js
 import mongoose from "mongoose";
 
 const commentSchema = new mongoose.Schema(
@@ -16,25 +17,21 @@ const commentSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    replies: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Comment",
-      },
-    ],
-    likes: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    likesCount: {
-      type: Number,
-      default: 0,
+    // parent for threaded replies
+    parentCommentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Comment",
+      default: null,
     },
+    // which user we are replying to (for the arrow → @username)
     replyToUser: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      default: null,
+    },
+    likesCount: {
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true }

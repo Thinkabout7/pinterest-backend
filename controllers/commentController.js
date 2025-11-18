@@ -9,7 +9,9 @@ import CommentLike from "../models/CommentLike.js";
 export const createComment = async (req, res) => {
   try {
     const { pinId, text, parentCommentId } = req.body;
-    if (!text?.trim()) return res.status(400).json({ message: "Text required" });
+    if (!text?.trim()) {
+      return res.status(400).json({ message: "Text required" });
+    }
 
     let replyToUser = null;
 
@@ -24,10 +26,10 @@ export const createComment = async (req, res) => {
       user: req.user._id,
       text: text.trim(),
       parentCommentId: parentCommentId || null,
-      replyToUser, // important
+      replyToUser,
     });
 
-    // Update comment count
+    // Update comment count on Pin
     await Pin.findByIdAndUpdate(pinId, { $inc: { commentsCount: 1 } });
 
     const populated = await Comment.findById(newComment._id)
@@ -49,7 +51,6 @@ export const createComment = async (req, res) => {
       likesCount: 0,
       isLiked: false,
     });
-
   } catch (err) {
     console.error("createComment error:", err);
     res.status(500).json({ message: "Server error" });
@@ -57,7 +58,7 @@ export const createComment = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   GET COMMENTS FOR PIN (SAFE THREADED VERSION)
+   GET COMMENTS FOR PIN (THREADED + SAFE)
 -------------------------------------------------- */
 export const getCommentsForPin = async (req, res) => {
   try {
@@ -67,11 +68,14 @@ export const getCommentsForPin = async (req, res) => {
       .sort({ createdAt: 1 })
       .lean();
 
-    const userId = req.user?._id;
+    const userId = req.user?._id || null;
     const map = {};
 
-    // FIRST PASS — build map entries
+    // FIRST PASS — build map with string keys to avoid ObjectId mismatch
     for (const c of list) {
+      const key = String(c._id);
+      const parentKey = c.parentCommentId ? String(c.parentCommentId) : null;
+
       const safeUser = c.user || {
         _id: "deleted",
         username: "Deleted User",
@@ -82,28 +86,28 @@ export const getCommentsForPin = async (req, res) => {
         ? Boolean(await CommentLike.exists({ user: userId, comment: c._id }))
         : false;
 
-      map[c._id] = {
-        _id: c._id,
+      map[key] = {
+        _id: key,
         text: c.text,
         user: safeUser,
         replyToUsername: c.replyToUser?.username || null,
         likesCount: c.likesCount || 0,
         isLiked,
         createdAt: c.createdAt,
-        parentCommentId: c.parentCommentId || null,
-        replies: [], // required
+        parentCommentId: parentKey,
+        replies: [], // ALWAYS initialize
       };
     }
 
     // SECOND PASS — attach replies to parents
     const roots = [];
 
-    for (const id in map) {
-      const comment = map[id];
-      const parentId = comment.parentCommentId;
+    for (const key in map) {
+      const comment = map[key];
+      const parentKey = comment.parentCommentId;
 
-      if (parentId && map[parentId]) {
-        map[parentId].replies.push(comment);
+      if (parentKey && map[parentKey]) {
+        map[parentKey].replies.push(comment);
       } else {
         roots.push(comment);
       }
@@ -113,7 +117,6 @@ export const getCommentsForPin = async (req, res) => {
       comments: roots,
       totalCount: list.length,
     });
-
   } catch (err) {
     console.error("getCommentsForPin error:", err);
     res.status(500).json({ message: "Server error" });
@@ -121,7 +124,7 @@ export const getCommentsForPin = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   DELETE COMMENT + REPLIES
+   DELETE COMMENT + DIRECT REPLIES
 -------------------------------------------------- */
 export const deleteComment = async (req, res) => {
   try {
@@ -139,7 +142,6 @@ export const deleteComment = async (req, res) => {
     });
 
     res.json({ success: true, removed: children.length });
-
   } catch (err) {
     console.error("deleteComment error:", err);
     res.status(500).json({ message: "Server error" });
@@ -147,7 +149,7 @@ export const deleteComment = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   TOGGLE LIKE (SAFE)
+   TOGGLE LIKE
 -------------------------------------------------- */
 export const toggleLike = async (req, res) => {
   try {
@@ -175,9 +177,28 @@ export const toggleLike = async (req, res) => {
     await comment.save();
 
     res.json({ likesCount: comment.likesCount, isLiked: true });
-
   } catch (err) {
     console.error("toggleLike error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/* --------------------------------------------------
+   GET USERS WHO LIKED A COMMENT (FOR REACTION MODAL)
+-------------------------------------------------- */
+export const getCommentLikes = async (req, res) => {
+  try {
+    const list = await CommentLike.find({
+      comment: req.params.commentId,
+    }).populate("user", "_id username profilePicture");
+
+    const users = list
+      .map((l) => l.user)
+      .filter(Boolean); // just in case a user was deleted
+
+    res.json({ users });
+  } catch (err) {
+    console.error("getCommentLikes error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

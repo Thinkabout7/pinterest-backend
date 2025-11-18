@@ -23,6 +23,7 @@ app.use(cors());
 
 // --- Fix dirname handling ---
 const __filename = fileURLToPath(import.meta.url);
+
 const __dirname = path.dirname(__filename);
 
 // --- Serve uploads folder ---
