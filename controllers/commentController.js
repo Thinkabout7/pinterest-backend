@@ -4,8 +4,8 @@ import Pin from "../models/Pin.js";
 import CommentLike from "../models/CommentLike.js";
 
 /* --------------------------------------------------
-   CREATE COMMENT OR REPLY  (FIXED)
-   -------------------------------------------------- */
+   CREATE COMMENT OR REPLY (SAFE + CORRECT)
+-------------------------------------------------- */
 export const createComment = async (req, res) => {
   try {
     const { pinId, text, parentCommentId } = req.body;
@@ -13,25 +13,26 @@ export const createComment = async (req, res) => {
 
     let replyToUser = null;
 
-    // FIX: lookup parent so we store replyToUser (ObjectId)
+    // If replying, store parent.user ObjectId
     if (parentCommentId) {
       const parent = await Comment.findById(parentCommentId);
-      if (parent) replyToUser = parent.user;   // ObjectId (CORRECT)
+      if (parent?.user) replyToUser = parent.user;
     }
 
-    const comment = await Comment.create({
+    const newComment = await Comment.create({
       pin: pinId,
       user: req.user._id,
       text: text.trim(),
       parentCommentId: parentCommentId || null,
-      replyToUser,   // FIXED
+      replyToUser, // important
     });
 
+    // Update comment count
     await Pin.findByIdAndUpdate(pinId, { $inc: { commentsCount: 1 } });
 
-    const populated = await Comment.findById(comment._id)
+    const populated = await Comment.findById(newComment._id)
       .populate("user", "username profilePicture")
-      .populate("replyToUser", "username");  // show @username in frontend
+      .populate("replyToUser", "username");
 
     const safeUser = populated.user || {
       _id: "deleted",
@@ -43,23 +44,24 @@ export const createComment = async (req, res) => {
       _id: populated._id,
       text: populated.text,
       user: safeUser,
-      replyToUsername: populated.replyToUser?.username || null, // CLEAN
+      replyToUsername: populated.replyToUser?.username || null,
       createdAt: populated.createdAt,
       likesCount: 0,
       isLiked: false,
     });
+
   } catch (err) {
-    console.error(err);
+    console.error("createComment error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /* --------------------------------------------------
-   GET COMMENTS FOR PIN — CORRECT THREADED BUILD
-   -------------------------------------------------- */
+   GET COMMENTS FOR PIN (SAFE THREADED VERSION)
+-------------------------------------------------- */
 export const getCommentsForPin = async (req, res) => {
   try {
-    const comments = await Comment.find({ pin: req.params.pinId })
+    const list = await Comment.find({ pin: req.params.pinId })
       .populate("user", "username profilePicture")
       .populate("replyToUser", "username")
       .sort({ createdAt: 1 })
@@ -68,17 +70,17 @@ export const getCommentsForPin = async (req, res) => {
     const userId = req.user?._id;
     const map = {};
 
-    // FIRST PASS: build map
-    for (const c of comments) {
-      const isLiked = userId
-        ? await CommentLike.exists({ user: userId, comment: c._id })
-        : false;
-
+    // FIRST PASS — build map entries
+    for (const c of list) {
       const safeUser = c.user || {
         _id: "deleted",
         username: "Deleted User",
         profilePicture: null,
       };
+
+      const isLiked = userId
+        ? Boolean(await CommentLike.exists({ user: userId, comment: c._id }))
+        : false;
 
       map[c._id] = {
         _id: c._id,
@@ -86,62 +88,67 @@ export const getCommentsForPin = async (req, res) => {
         user: safeUser,
         replyToUsername: c.replyToUser?.username || null,
         likesCount: c.likesCount || 0,
-        isLiked: !!isLiked,
+        isLiked,
         createdAt: c.createdAt,
         parentCommentId: c.parentCommentId || null,
-        replies: [], // FIX: always initialize
+        replies: [], // required
       };
     }
 
-    // SECOND PASS: attach replies
+    // SECOND PASS — attach replies to parents
     const roots = [];
 
     for (const id in map) {
-      const c = map[id];
-      if (c.parentCommentId && map[c.parentCommentId]) {
-        map[c.parentCommentId].replies.push(c);
+      const comment = map[id];
+      const parentId = comment.parentCommentId;
+
+      if (parentId && map[parentId]) {
+        map[parentId].replies.push(comment);
       } else {
-        roots.push(c);
+        roots.push(comment);
       }
     }
 
-    res.json({ comments: roots, totalCount: comments.length });
+    res.json({
+      comments: roots,
+      totalCount: list.length,
+    });
 
   } catch (err) {
-    console.error(err);
+    console.error("getCommentsForPin error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /* --------------------------------------------------
-   DELETE COMMENT + CHILDREN
-   -------------------------------------------------- */
+   DELETE COMMENT + REPLIES
+-------------------------------------------------- */
 export const deleteComment = async (req, res) => {
   try {
     const comment = await Comment.findById(req.params.id);
     if (!comment) return res.status(404).json({ message: "Not found" });
 
-    const toDelete = await Comment.find({
+    const children = await Comment.find({
       $or: [{ _id: req.params.id }, { parentCommentId: req.params.id }],
     });
 
-    await Comment.deleteMany({ _id: { $in: toDelete.map(c => c._id) } });
+    await Comment.deleteMany({ _id: { $in: children.map((c) => c._id) } });
 
-    await Pin.findByIdAndUpdate(
-      comment.pin,
-      { $inc: { commentsCount: -toDelete.length } }
-    );
+    await Pin.findByIdAndUpdate(comment.pin, {
+      $inc: { commentsCount: -children.length },
+    });
 
-    res.json({ success: true, removed: toDelete.length });
+    res.json({ success: true, removed: children.length });
+
   } catch (err) {
-    console.error(err);
+    console.error("deleteComment error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
 /* --------------------------------------------------
-   TOGGLE LIKE
-   -------------------------------------------------- */
+   TOGGLE LIKE (SAFE)
+-------------------------------------------------- */
 export const toggleLike = async (req, res) => {
   try {
     const comment = await Comment.findById(req.params.commentId);
@@ -159,13 +166,18 @@ export const toggleLike = async (req, res) => {
       return res.json({ likesCount: comment.likesCount, isLiked: false });
     }
 
-    await CommentLike.create({ user: req.user._id, comment: comment._id });
+    await CommentLike.create({
+      user: req.user._id,
+      comment: comment._id,
+    });
+
     comment.likesCount += 1;
     await comment.save();
 
     res.json({ likesCount: comment.likesCount, isLiked: true });
+
   } catch (err) {
-    console.error(err);
+    console.error("toggleLike error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
