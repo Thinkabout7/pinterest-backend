@@ -1,3 +1,4 @@
+
 // routes/followRoutes.js
 import express from "express";
 import User from "../models/User.js";
@@ -100,7 +101,7 @@ router.get("/:id/following", async (req, res) => {
   }
 });
 
-// ✅ NEW: Check follow status for notification button
-router.get("/check/:userId", protect, checkFollowStatus);
+// ✅ Check follow status for notification button
+router.get("/check/:id", protect, checkFollowStatus);
 
 export default router;

@@ -1,3 +1,4 @@
+// controllers/followController.js
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 
@@ -126,16 +127,18 @@ export const getFollowing = async (req, res) => {
 export const checkFollowStatus = async (req, res) => {
   try {
     const myId = req.user._id;
-    const targetId = req.params.id;
+    const targetId = req.params.id; // 🔴 this matches /check/:id
 
     const me = await User.findById(myId);
     const target = await User.findById(targetId);
     if (!target) return res.status(404).json({ message: "User not found" });
 
+    // am I following them?
     const isFollowing = me.following.some(
       (u) => u.toString() === targetId.toString()
     );
 
+    // are they following me?
     const isFollowedByTarget = target.following.some(
       (u) => u.toString() === myId.toString()
     );
