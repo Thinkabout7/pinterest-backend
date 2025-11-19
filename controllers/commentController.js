@@ -2,6 +2,7 @@
 import Comment from "../models/Comment.js";
 import Pin from "../models/Pin.js";
 import CommentLike from "../models/CommentLike.js";
+import Notification from "../models/Notification.js";   // 🔔 NOTIF IMPORT
 
 /* --------------------------------------------------
    CREATE COMMENT OR REPLY (SAFE + CORRECT)
@@ -16,8 +17,9 @@ export const createComment = async (req, res) => {
     let replyToUser = null;
 
     // If replying, store parent.user ObjectId
+    let parent = null;
     if (parentCommentId) {
-      const parent = await Comment.findById(parentCommentId);
+      parent = await Comment.findById(parentCommentId);
       if (parent?.user) replyToUser = parent.user;
     }
 
@@ -30,7 +32,37 @@ export const createComment = async (req, res) => {
     });
 
     // Update comment count on Pin
-    await Pin.findByIdAndUpdate(pinId, { $inc: { commentsCount: 1 } });
+    const pin = await Pin.findByIdAndUpdate(
+      pinId,
+      { $inc: { commentsCount: 1 } },
+      { new: true }
+    );
+
+    /* --------------------------------------------------
+       🔔 NOTIFICATIONS
+    -------------------------------------------------- */
+
+    // 1️⃣ Commented on someone's pin
+    if (pin && String(pin.user) !== String(req.user._id) && !parentCommentId) {
+      await Notification.create({
+        recipient: pin.user,
+        sender: req.user._id,
+        type: "comment",
+        pin: pin._id,
+        message: `${req.user.username} commented on your pin.`,
+      });
+    }
+
+    // 2️⃣ Replied to someone's comment
+    if (parent && String(parent.user) !== String(req.user._id)) {
+      await Notification.create({
+        recipient: parent.user,
+        sender: req.user._id,
+        type: "comment",
+        pin: pin._id,
+        message: `${req.user.username} replied to your comment.`,
+      });
+    }
 
     const populated = await Comment.findById(newComment._id)
       .populate("user", "username profilePicture")
@@ -71,7 +103,7 @@ export const getCommentsForPin = async (req, res) => {
     const userId = req.user?._id || null;
     const map = {};
 
-    // FIRST PASS — build map with string keys to avoid ObjectId mismatch
+    // FIRST PASS — build map
     for (const c of list) {
       const key = String(c._id);
       const parentKey = c.parentCommentId ? String(c.parentCommentId) : null;
@@ -95,11 +127,11 @@ export const getCommentsForPin = async (req, res) => {
         isLiked,
         createdAt: c.createdAt,
         parentCommentId: parentKey,
-        replies: [], // ALWAYS initialize
+        replies: [],
       };
     }
 
-    // SECOND PASS — attach replies to parents
+    // SECOND PASS — attach replies
     const roots = [];
 
     for (const key in map) {
@@ -149,7 +181,7 @@ export const deleteComment = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   TOGGLE LIKE
+   TOGGLE LIKE (WITH NOTIFICATION)
 -------------------------------------------------- */
 export const toggleLike = async (req, res) => {
   try {
@@ -161,6 +193,7 @@ export const toggleLike = async (req, res) => {
       comment: comment._id,
     });
 
+    // UNLIKE
     if (existing) {
       await CommentLike.deleteOne({ _id: existing._id });
       comment.likesCount = Math.max(0, comment.likesCount - 1);
@@ -168,6 +201,7 @@ export const toggleLike = async (req, res) => {
       return res.json({ likesCount: comment.likesCount, isLiked: false });
     }
 
+    // LIKE
     await CommentLike.create({
       user: req.user._id,
       comment: comment._id,
@@ -175,6 +209,19 @@ export const toggleLike = async (req, res) => {
 
     comment.likesCount += 1;
     await comment.save();
+
+    /* --------------------------------------------------
+       🔔 NOTIFY COMMENT OWNER (if not self)
+    -------------------------------------------------- */
+    if (String(comment.user) !== String(req.user._id)) {
+      await Notification.create({
+        recipient: comment.user,
+        sender: req.user._id,
+        type: "comment",
+        pin: comment.pin,
+        message: `${req.user.username} liked your comment.`,
+      });
+    }
 
     res.json({ likesCount: comment.likesCount, isLiked: true });
   } catch (err) {
@@ -194,7 +241,7 @@ export const getCommentLikes = async (req, res) => {
 
     const users = list
       .map((l) => l.user)
-      .filter(Boolean); // just in case a user was deleted
+      .filter(Boolean);
 
     res.json({ users });
   } catch (err) {
