@@ -64,12 +64,16 @@ router.post("/login", async (req, res) => {
     let { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: "Email and password required" });
+      return res.status(400).json({ message: "Email/Username and password required" });
     }
 
     password = String(password);
 
-    const user = await User.findOne({ email });
+    // 🔥 Allow login with email OR username
+    const user = await User.findOne({
+      $or: [{ email: email }, { username: email }]
+    });
+
     if (!user) {
       console.log("❌ No user found for:", email);
       return res.status(404).json({ message: "User not found" });
@@ -84,7 +88,7 @@ router.post("/login", async (req, res) => {
 
     if (!isMatch) {
       console.log("❌ Password mismatch for user:", email);
-      return res.status(400).json({ message: "Invalid email or password" });
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
