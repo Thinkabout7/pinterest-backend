@@ -3,6 +3,7 @@ import express from "express";
 import User from "../models/User.js";
 import protect from "../middleware/authMiddleware.js";
 import Notification from "../models/Notification.js";
+import { checkFollowStatus } from "../controllers/followController.js";
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.post("/:id/follow", protect, async (req, res) => {
   }
 });
 
-// 🚫 Unfollow a user
+// 🚫 Unfollow
 router.post("/:id/unfollow", protect, async (req, res) => {
   try {
     const targetId = req.params.id;
@@ -52,9 +53,7 @@ router.post("/:id/unfollow", protect, async (req, res) => {
     const target = await User.findById(targetId);
     if (!target) return res.status(404).json({ message: "User not found" });
 
-    me.following = me.following.filter(
-      (u) => u.toString() !== targetId.toString()
-    );
+    me.following = me.following.filter((u) => u.toString() !== targetId);
     target.followers = target.followers.filter(
       (u) => u.toString() !== myId.toString()
     );
@@ -69,7 +68,7 @@ router.post("/:id/unfollow", protect, async (req, res) => {
   }
 });
 
-// 👀 Get followers list
+// 👀 Followers list
 router.get("/:id/followers", async (req, res) => {
   try {
     const user = await User.findById(req.params.id).populate(
@@ -85,7 +84,7 @@ router.get("/:id/followers", async (req, res) => {
   }
 });
 
-// 👥 Get following list
+// 👥 Following list
 router.get("/:id/following", async (req, res) => {
   try {
     const user = await User.findById(req.params.id).populate(
@@ -100,5 +99,8 @@ router.get("/:id/following", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// ✅ NEW: Check follow status for notification button
+router.get("/check/:userId", protect, checkFollowStatus);
 
 export default router;

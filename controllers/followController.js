@@ -1,4 +1,3 @@
-// controllers/followController.js
 import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 
@@ -117,6 +116,36 @@ export const getFollowing = async (req, res) => {
     return res.status(200).json(user.following);
   } catch (err) {
     console.error("GET FOLLOWING ERROR:", err);
+    return res.status(500).json({ message: err.message });
+  }
+};
+
+/* ----------------------------------------------------------
+   CHECK FOLLOW STATUS (⭐ REQUIRED FOR FOLLOW BACK BUTTON)
+----------------------------------------------------------- */
+export const checkFollowStatus = async (req, res) => {
+  try {
+    const myId = req.user._id;
+    const targetId = req.params.id;
+
+    const me = await User.findById(myId);
+    const target = await User.findById(targetId);
+    if (!target) return res.status(404).json({ message: "User not found" });
+
+    const isFollowing = me.following.some(
+      (u) => u.toString() === targetId.toString()
+    );
+
+    const isFollowedByTarget = target.following.some(
+      (u) => u.toString() === myId.toString()
+    );
+
+    return res.json({
+      isFollowing,
+      isFollowedBySender: isFollowedByTarget,
+    });
+  } catch (err) {
+    console.error("CHECK FOLLOW STATUS ERROR:", err);
     return res.status(500).json({ message: err.message });
   }
 };
