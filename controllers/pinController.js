@@ -1,3 +1,5 @@
+// controllers/pinController.js
+
 import Pin from "../models/Pin.js";
 import Like from "../models/Like.js";
 import Notification from "../models/Notification.js";

@@ -19,7 +19,7 @@ router.post("/:pinId", protect, async (req, res) => {
 
     const like = await Like.create({ user: req.user._id, pin: pin._id });
 
-    // 🔔 Notify the pin owner (only if not liking own pin)
+    // 🔔 Notify pin owner — but never notify self
     if (pin.user.toString() !== req.user._id.toString()) {
       await Notification.create({
         recipient: pin.user,
@@ -46,6 +46,7 @@ router.delete("/:pinId", protect, async (req, res) => {
     });
 
     if (!like) return res.status(404).json({ message: "Like not found" });
+
     res.status(200).json({ message: "Unliked successfully" });
   } catch (err) {
     console.error("Unlike error:", err);
@@ -53,7 +54,7 @@ router.delete("/:pinId", protect, async (req, res) => {
   }
 });
 
-// 🔢 Get like count for a pin
+// 🔢 Like count ONLY
 router.get("/:pinId", async (req, res) => {
   try {
     const count = await Like.countDocuments({ pin: req.params.pinId });
@@ -67,17 +68,16 @@ router.get("/:pinId", async (req, res) => {
 // 👥 Get users who liked a pin
 router.get("/:pinId/users", async (req, res) => {
   try {
-    const likes = await Like.find({ pin: req.params.pinId }).populate("user", "username email profilePicture");
-    const users = likes.map(like => like.user);
+    const likes = await Like.find({ pin: req.params.pinId }).populate(
+      "user",
+      "username email profilePicture"
+    );
+    const users = likes.map((l) => l.user);
     res.status(200).json(users);
   } catch (err) {
     console.error("Get likers error:", err);
     res.status(500).json({ message: err.message });
   }
 });
-
-// -----------------------------------------------
-// 🔥 LIKE COUNT ONLY (No more like/unlike logic)
-// -----------------------------------------------
 
 export default router;
