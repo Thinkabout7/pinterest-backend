@@ -7,7 +7,7 @@ dotenv.config();
 console.log("✅ Cloudinary ENV check:");
 console.log("CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME);
 console.log("API_KEY:", process.env.CLOUDINARY_API_KEY);
-
+console.log("OPENAI_API_KEY:", process.env.OPENAI_API_KEY);
 // --- Core imports ---
 import express from "express";
 import connectDB from "./config/db.js";
@@ -46,6 +46,7 @@ import userRoutes from "./routes/userRoute.js";
 import SavedPinRoutes from "./routes/SavedPinRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import commentRoutes from "./routes/commentRoutes.js";
+import aiSearchRoutes from "./routes/aiSearchRoutes.js";
 // --- Route usage ---
 app.use("/api/auth", authRoutes);
 app.use("/api/pins", pinRoutes);
@@ -60,6 +61,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/saved", SavedPinRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/comments", commentRoutes);
+app.use("/api/ai-search", aiSearchRoutes);
 // --- Root test route ---
 app.get("/", (req, res) => {
   res.send("✅ Pinterest Backend Running...");
