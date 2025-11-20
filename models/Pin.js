@@ -1,4 +1,4 @@
-// models/Pin.js
+//Pin.js
 import mongoose from "mongoose";
 
 const PinSchema = new mongoose.Schema(
@@ -17,7 +17,7 @@ const PinSchema = new mongoose.Schema(
       default: "general",
     },
     mediaUrl: {
-      type: String, // Cloudinary URL for image or video
+      type: String,
       required: true,
     },
     mediaType: {
@@ -41,6 +41,12 @@ const PinSchema = new mongoose.Schema(
     commentsCount: {
       type: Number,
       default: 0,
+    },
+
+    // NEW FIELD
+    tags: {
+      type: [String],
+      default: [],
     },
   },
   { timestamps: true }

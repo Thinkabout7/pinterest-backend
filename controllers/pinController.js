@@ -1,20 +1,18 @@
-// controllers/pinController.js
-
 import Pin from "../models/Pin.js";
 import Like from "../models/Like.js";
 import Notification from "../models/Notification.js";
-import { autoAssignCover } from "./boardController.js"; // adjust path if needed
+import { autoAssignCover } from "./boardController.js";
 import axios from "axios";
 
-// 🧃 Create a new pin
+//  Create a new pin
 export const createPin = async (req, res) => {
   try {
     const { title, description, category, boardId } = req.body;
 
     if (!req.file?.path) {
-      return res
-        .status(400)
-        .json({ message: "Media file is required (image or video)" });
+      return res.status(400).json({
+        message: "Media file is required (image or video)",
+      });
     }
 
     const mediaType = /^video\//i.test(req.file.mimetype) ? "video" : "image";
@@ -29,6 +27,27 @@ export const createPin = async (req, res) => {
       boardId,
     });
 
+    // AI AUTO-TAGS (Level 1)
+    try {
+      const hfRes = await axios.post(
+        "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large",
+        { inputs: newPin.mediaUrl },
+        { headers: { Authorization: `Bearer ${process.env.HF_TOKEN}` } }
+      );
+
+      const caption = hfRes.data[0]?.generated_text || "";
+      const tags = caption
+        .toLowerCase()
+        .split(" ")
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .slice(0, 8);
+
+      newPin.tags = tags;
+    } catch {
+      newPin.tags = []; // safe fallback
+    }
+
     const savedPin = await newPin.save();
 
     if (boardId) {
@@ -42,7 +61,7 @@ export const createPin = async (req, res) => {
   }
 };
 
-// 🍱 Get all pins (simple list)
+//  Get all pins
 export const getAllPins = async (req, res) => {
   try {
     const pins = await Pin.find()
@@ -55,11 +74,13 @@ export const getAllPins = async (req, res) => {
   }
 };
 
-// 🧊 Get only the pin document (simple, old endpoint)
+//  Get only pin doc
 export const getPinById = async (req, res) => {
   try {
-    const pin = await Pin.findById(req.params.id)
-      .populate("user", "username email profilePicture");
+    const pin = await Pin.findById(req.params.id).populate(
+      "user",
+      "username email profilePicture"
+    );
 
     if (!pin) {
       return res.status(404).json({ message: "Pin not found" });
@@ -71,44 +92,36 @@ export const getPinById = async (req, res) => {
   }
 };
 
-// 🍱 BIG LUNCHBOX: get full pin + likes + comments
+//  Big pin with likes & comments
 export const getFullPin = async (req, res) => {
   try {
     const pinDoc = await Pin.findById(req.params.id)
       .populate("user", "_id username profilePicture")
       .lean();
 
-    if (!pinDoc) {
-      return res.status(404).json({ message: "Pin not found" });
-    }
+    if (!pinDoc) return res.status(404).json({ message: "Pin not found" });
 
-    // Likes
     const likes = await Like.find({ pin: pinDoc._id })
       .populate("user", "_id username profilePicture")
       .lean();
 
     const likesUsers = likes.map((l) => l.user);
     const likesCount = likesUsers.length;
-
-    // Comments
     const commentsCount = pinDoc.commentsCount || 0;
 
-    // FINAL BIG OBJECT
-    const fullPin = {
+    res.status(200).json({
       ...pinDoc,
       likesCount,
       likesUsers,
       commentsCount,
-    };
-
-    res.status(200).json(fullPin);
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// 🗑 Update pin
+//  Update pin
 export const updatePin = async (req, res) => {
   try {
     const pin = await Pin.findById(req.params.id);
@@ -130,7 +143,7 @@ export const updatePin = async (req, res) => {
   }
 };
 
-// 🗑 Delete pin
+// Delete pin
 export const deletePin = async (req, res) => {
   try {
     const pin = await Pin.findById(req.params.id);
@@ -147,17 +160,19 @@ export const deletePin = async (req, res) => {
   }
 };
 
-// ⬇ Download pin media
+//  Download media
 export const downloadPinMedia = async (req, res) => {
   try {
     const pin = await Pin.findById(req.params.pinId);
     if (!pin) return res.status(404).json({ message: "Pin not found" });
 
-    const response = await axios.get(pin.mediaUrl, { responseType: "stream" });
+    const response = await axios.get(pin.mediaUrl, {
+      responseType: "stream",
+    });
+
     const contentType = pin.mediaType === "video" ? "video/mp4" : "image/jpeg";
-    const filename = `pin-${pin._id}.${
-      pin.mediaType === "video" ? "mp4" : "jpg"
-    }`;
+    const filename = `pin-${pin._id}.${pin.mediaType === "video" ? "mp4" : "jpg"
+      }`;
 
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);

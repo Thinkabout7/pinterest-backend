@@ -1,23 +1,31 @@
-// routes/searchRoutes.js
+//searchRoutes.js
 import express from "express";
 import Pin from "../models/Pin.js";
 import User from "../models/User.js";
 
 const router = express.Router();
 
-// 🔍 Search pins and users
 router.get("/", async (req, res) => {
   try {
     const query = req.query.q;
     if (!query) {
-      return res.status(400).json({ message: "Please provide a search query (?q=...)" });
+      return res
+        .status(400)
+        .json({ message: "Please provide a search query (?q=...)" });
     }
 
-    // Case-insensitive regex search
+    // LEVEL-1 SEARCH  
+    // Search title + description + category + tags
     const pinResults = await Pin.find({
-      title: { $regex: query, $options: "i" },
+      $or: [
+        { title: { $regex: query, $options: "i" } },
+        { description: { $regex: query, $options: "i" } },
+        { category: { $regex: query, $options: "i" } },
+        { tags: { $regex: query, $options: "i" } },
+      ],
     }).populate("user", "username profilePicture");
 
+    // Search users
     const userResults = await User.find({
       username: { $regex: query, $options: "i" },
     }).select("username profilePicture email");
