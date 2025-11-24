@@ -9,6 +9,8 @@ import Like from "../models/Like.js";
 import Notification from "../models/Notification.js";
 import Comment from "../models/Comment.js";
 import CommentLike from "../models/CommentLike.js";
+// ← ADD THIS LINE ONLY (exactly here or anywhere among imports)
+import { generateImageTags } from "../helpers/geminiImageTags.js";
 
 const router = express.Router();
 
@@ -44,11 +46,26 @@ router.post("/", protect, upload.single("media"), async (req, res) => {
       category,
       mediaUrl: req.file.path,
       mediaType,
-     user: req.user._id,
+      user: req.user._id,
       boardId,
     });
 
     const savedPin = await newPin.save();
+
+    // === AUTOMATIC AI TAGGING FOR NEW PINS (IMAGES + VIDEOS) ===
+    try {
+      console.log("Generating AI tags for new pin...");
+      const aiTags = await generateImageTags(savedPin.mediaUrl);
+      if (aiTags && aiTags.length > 0) {
+        savedPin.tags = aiTags;
+        await savedPin.save();
+        console.log("AI tags added automatically:", aiTags.join(", "));
+      }
+    } catch (err) {
+      console.log("AI tagging failed (non-critical):", err.message);
+      // We don't break the upload even if Gemini is down
+    }
+    // ===================================================
 
     if (boardId) {
       await autoAssignCover(boardId, req.file.path);
@@ -278,7 +295,5 @@ router.get("/:pinId/likes", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
-
 
 export default router;

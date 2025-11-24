@@ -1,8 +1,12 @@
+// controllers/pinController.js
 import Pin from "../models/Pin.js";
 import Like from "../models/Like.js";
 import Notification from "../models/Notification.js";
 import { autoAssignCover } from "./boardController.js";
 import axios from "axios";
+
+// NEW — Gemini tag helper
+import { generateImageTags } from "../helpers/geminiImageTags.js";
 
 //  Create a new pin
 export const createPin = async (req, res) => {
@@ -27,26 +31,22 @@ export const createPin = async (req, res) => {
       boardId,
     });
 
-    // AI AUTO-TAGS (Level 1)
+    // GEMINI AI TAGGING (images + videos) — IMPROVED VERSION
+    let tags = [];
     try {
-      const hfRes = await axios.post(
-        "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large",
-        { inputs: newPin.mediaUrl },
-        { headers: { Authorization: `Bearer ${process.env.HF_TOKEN}` } }
-      );
-
-      const caption = hfRes.data[0]?.generated_text || "";
-      const tags = caption
-        .toLowerCase()
-        .split(" ")
-        .map((t) => t.trim())
-        .filter(Boolean)
-        .slice(0, 8);
-
-      newPin.tags = tags;
-    } catch {
-      newPin.tags = []; // safe fallback
+      console.log("Generating AI tags for new pin:", mediaType);
+      tags = await generateImageTags(req.file.path);
+      if (tags && tags.length > 0) {
+        console.log("AI tags generated:", tags.join(", "));
+      } else {
+        console.log("No tags returned by AI (empty result)");
+      }
+    } catch (err) {
+      console.log("AI tagging failed (upload still works):", err.message);
+      tags = [];
     }
+    newPin.tags = tags;
+    // END OF AI TAGGING BLOCK
 
     const savedPin = await newPin.save();
 
@@ -171,8 +171,9 @@ export const downloadPinMedia = async (req, res) => {
     });
 
     const contentType = pin.mediaType === "video" ? "video/mp4" : "image/jpeg";
-    const filename = `pin-${pin._id}.${pin.mediaType === "video" ? "mp4" : "jpg"
-      }`;
+    const filename = `pin-${pin._id}.${
+      pin.mediaType === "video" ? "mp4" : "jpg"
+    }`;
 
     res.setHeader("Content-Type", contentType);
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
