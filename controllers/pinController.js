@@ -11,7 +11,7 @@ import { generateImageTags } from "../helpers/geminiImageTags.js";
 //  Create a new pin
 export const createPin = async (req, res) => {
   try {
-    const { title, description, category, boardId } = req.body;
+    let { title, description, category, boardId } = req.body;
 
     if (!req.file?.path) {
       return res.status(400).json({
@@ -19,6 +19,10 @@ export const createPin = async (req, res) => {
       });
     }
 
+    title = title || "";
+    description = description || "";
+    category = category || "";
+    
     const mediaType = /^video\//i.test(req.file.mimetype) ? "video" : "image";
 
     const newPin = new Pin({

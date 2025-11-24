@@ -7,14 +7,16 @@ const PinSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      default: ""   //optional
     },
     description: {
       type: String,
       trim: true,
+      default: ""   //optional
     },
     category: {
       type: String,
-      default: "general",
+      default: "",
     },
     mediaUrl: {
       type: String,

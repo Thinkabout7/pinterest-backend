@@ -1,8 +1,8 @@
-// helpers/geminiImageTags.js   ← REPLACE ENTIRE FILE WITH THIS
+// helpers/geminiImageTags.js
 import fetch from 'node-fetch';
 
 /**
- * Generates 10–15 high-quality AI tags for images OR videos using Gemini 2.0 Flash
+ * Generates 12–15 high-quality AI tags (including brands) for images OR videos using Gemini 2.0 Flash
  * @param {string} mediaUrl - Cloudinary URL of the image or video
  * @returns {string[]} - Array of lowercase tags
  */
@@ -10,19 +10,36 @@ export async function generateImageTags(mediaUrl) {
   if (!mediaUrl || typeof mediaUrl !== 'string') return [];
 
   try {
-    // --- Smart video/image detection ---
-    const isVideo = /\.(mp4|webm|mov|avi)$/i.test(mediaUrl) || 
-                    mediaUrl.includes('/video/') || 
-                    mediaUrl.includes('video-upload');
+    // --- Detect if media is video or image ---
+    const isVideo = /\.(mp4|webm|mov|avi)$/i.test(mediaUrl) ||
+                    mediaUrl.includes('/video/') ||
+                    mediaUrl.includes('video/upload');
 
     const mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
 
-    // --- Tailored prompts (Gemini performs way better with these) ---
+    // --- Strong brand-focused prompt ---
     const prompt = isVideo
-      ? "Watch the entire video carefully. Extract 12-15 short, accurate, comma-separated tags describing the main subject, actions, characters, setting, and mood. Example: spiderman, swinging, city skyline, night, action, superhero, rooftop, web shooting, dramatic, marvel"
-      : "Analyze this image and return 12-15 short, accurate, comma-separated tags. Focus on objects, people, colors, style, and mood. Example: tea, porcelain cup, steam, cozy morning, minimalist, white background, hot beverage, saucer";
+      ? `Analyze this video very carefully and extract 12–15 short tags.
+         ALWAYS try to identify:
+         - exact brands (nike, adidas, timberland, apple)
+         - logos
+         - shoe type
+         - clothing type
+         - accessories
+         - device models
+         - colors, objects, scene
+         Return ONLY comma-separated tags:`
+      : `Analyze this image very carefully and extract 12–15 short tags.
+         ALWAYS try to identify:
+         - exact product brands (timberland, adidas, nike, apple)
+         - logos
+         - shoe type
+         - tech device models (iphone 14 pro, macbook air)
+         - clothing type
+         - colors, objects, background
+         Return ONLY comma-separated tags, no sentences:`;
 
-    // --- Download media ---
+    // --- Download media file ---
     const response = await fetch(mediaUrl);
     if (!response.ok) throw new Error(`Failed to fetch media: ${response.status}`);
 
@@ -40,7 +57,12 @@ export async function generateImageTags(mediaUrl) {
             {
               parts: [
                 { text: prompt },
-                { inlineData: { mimeType, data: base64 } }
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64,
+                  }
+                }
               ]
             }
           ],
@@ -58,21 +80,23 @@ export async function generateImageTags(mediaUrl) {
       throw new Error(result.error.message || 'Gemini API error');
     }
 
-    if (!result.candidates?.[0]?.content?.parts?.[0]?.text) {
+    const text =
+      result?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    if (!text) {
       console.warn("Gemini returned no tags for:", mediaUrl);
       return [];
     }
 
-    const text = result.candidates[0].content.parts[0].text;
-
+    // --- Clean and format tags ---
     return text
       .split(',')
-      .map(tag => tag.trim().toLowerCase().replace(/[^\w\s-]/g, '')) // clean weird chars
-      .filter(tag => tag.length > 1 && tag.length < 30) // reasonable length
+      .map(tag => tag.trim().toLowerCase().replace(/[^\w\s-]/g, ''))
+      .filter(tag => tag.length > 1 && tag.length < 30)
       .slice(0, 15);
 
   } catch (error) {
     console.error('Gemini Tag Error →', error.message);
-    return []; // Never crash the upload flow
+    return []; // Never break pin upload
   }
 }
