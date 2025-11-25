@@ -29,6 +29,14 @@ const userSchema = new mongoose.Schema(
     following: [
       { type: mongoose.Schema.Types.ObjectId, ref: "User" }
     ],
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    isDeactivated: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
