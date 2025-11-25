@@ -113,6 +113,8 @@ router.post("/login", async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        isDeactivated: user.isDeactivated || false,
+        isDeleted: user.isDeleted || false,
       },
     });
   } catch (err) {
@@ -129,8 +131,14 @@ router.get("/profile", protect, async (req, res) => {
   try {
     res.status(200).json({
       message: "Protected route accessed successfully",
-      user: req.user,
-    });
+      user:{ 
+
+      ...req.user,
+      isDeactivated: req.user.isDeactivated || false,
+      isDeleted: req.user.isDeleted || false,
+      }
+    
+      });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
