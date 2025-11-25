@@ -8,36 +8,37 @@ import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-/* ========================================
-   REGISTER
-======================================== */
+// ---------------- REGISTER ----------------
 router.post("/register", async (req, res) => {
   try {
+    console.log("Raw request body:", req.body);
     let { username, email, password } = req.body;
 
     if (!username || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Duplicate EMAIL
-    const emailExists = await User.findOne({ email });
-    if (emailExists) {
+    password = String(password);
+
+    const existing = await User.findOne({ email });
+    console.log("Existing user check:", existing);
+    if (existing) {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    // Duplicate USERNAME
-    const usernameExists = await User.findOne({ username });
-    if (usernameExists) {
-      return res.status(400).json({ message: "Username already taken" });
-    }
+    console.log("🔐 Registering new user:");
+    console.log("Plain password received:", password);
 
-    const hashedPassword = await bcrypt.hash(String(password), 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    console.log("Hashed password being saved:", hashedPassword);
 
     const user = await User.create({
       username,
       email,
       password: hashedPassword,
     });
+
+    console.log("Saved user:", await User.findOne({ email }));
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
@@ -54,52 +55,42 @@ router.post("/register", async (req, res) => {
     });
   } catch (err) {
     console.error("Register error:", err);
-
-    // Mongo duplicate fallback
-    if (err.code === 11000) {
-      if (err.keyPattern?.username) {
-        return res.status(400).json({ message: "Username already taken" });
-      }
-      if (err.keyPattern?.email) {
-        return res.status(400).json({ message: "Email already registered" });
-      }
-    }
-
     res.status(500).json({ message: err.message });
   }
 });
 
-
-/* ========================================
-   LOGIN
-======================================== */
+// ---------------- LOGIN ----------------
 router.post("/login", async (req, res) => {
   try {
+    console.log("Raw request body:", req.body);
     let { email, password } = req.body;
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email/Username and password required" });
+      return res.status(400).json({ message: "Email/Username and password required" });
     }
 
+    password = String(password);
+
+    // 🔥 Allow login with email OR username
     const user = await User.findOne({
-      $or: [{ email }, { username: email }],
+      $or: [{ email: email }, { username: email }]
     });
 
-    if (!user || user.isDeleted) {
+    if (!user) {
+      console.log("❌ No user found for:", email);
       return res.status(404).json({ message: "User not found" });
     }
 
-    const isMatch = await bcrypt.compare(String(password), user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
+    console.log("✅ Found user:", user.email);
+    console.log("Incoming password:", password);
+    console.log("Stored hash:", user.password);
 
-    // Auto-reactivate
-    if (user.isDeactivated) {
-      user.isDeactivated = false;
-      await user.save();
+    const isMatch = await bcrypt.compare(password, user.password);
+    console.log("Password match result:", isMatch);
+
+    if (!isMatch) {
+      console.log("❌ Password mismatch for user:", email);
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
@@ -121,167 +112,26 @@ router.post("/login", async (req, res) => {
   }
 });
 
-
-/* ========================================
-   PROFILE
-======================================== */
+// ---------------- PROFILE ----------------
+// ---------------- PROFILE ----------------
 router.get("/profile", protect, async (req, res) => {
   try {
-    res.status(200).json({
-      message: "Protected route accessed successfully",
-      user: req.user,
+    const user = await User.findById(req.user._id).select(
+      "_id username email profilePicture followers following"
+    );
+
+    res.json({
+      user: {
+        _id: user._id,
+        username: user.username,
+        email: user.email,
+        profilePicture: user.profilePicture || null,
+        followers: user.followers,
+        following: user.following,
+      }
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
-
-
-/* ========================================
-   CHANGE USERNAME
-======================================== */
-router.put("/change-username", protect, async (req, res) => {
-  try {
-    const { newUsername } = req.body;
-
-    if (!newUsername) {
-      return res.status(400).json({ message: "Username required" });
-    }
-
-    const exists = await User.findOne({ username: newUsername });
-    if (exists) {
-      return res.status(400).json({ message: "Username already taken" });
-    }
-
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      { username: newUsername },
-      { new: true }
-    );
-
-    res.json({ message: "Username updated", user });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-
-/* ========================================
-   CHANGE PASSWORD
-======================================== */
-router.put("/change-password", protect, async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-
-    if (!currentPassword || !newPassword) {
-      return res
-        .status(400)
-        .json({ message: "Current and new password required" });
-    }
-
-    if (currentPassword === newPassword) {
-      return res.status(400).json({
-        message: "New password must be different from current password",
-      });
-    }
-
-    const user = await User.findById(req.user._id);
-
-    if (!user || user.isDeleted) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: "Incorrect current password" });
-    }
-
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
-
-    res.json({ message: "Password updated successfully" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-
-/* ========================================
-   DEACTIVATE ACCOUNT (TEMPORARY)
-======================================== */
-router.put("/deactivate", protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-
-    if (!user || user.isDeleted) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (user.isDeactivated) {
-      return res.status(400).json({ message: "Account already deactivated" });
-    }
-
-    user.isDeactivated = true;
-    await user.save();
-
-    res.json({ message: "Account deactivated successfully" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-
-/* ========================================
-   REACTIVATE ACCOUNT
-======================================== */
-router.put("/reactivate", protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-
-    if (!user || user.isDeleted) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (!user.isDeactivated) {
-      return res.status(400).json({ message: "Account is not deactivated" });
-    }
-
-    user.isDeactivated = false;
-    await user.save();
-
-    res.json({ message: "Account reactivated successfully" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-
-/* ========================================
-   DELETE ACCOUNT (PERMANENT)
-======================================== */
-router.delete("/delete-account", protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-
-    if (!user || user.isDeleted) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Soft delete + free username/email
-    user.isDeleted = true;
-    user.isDeactivated = true;
-
-    const id = user._id.toString();
-    user.username = `deleted_user_${id}`;
-    user.email = `deleted_${id}@deleted.local`;
-    user.password = await bcrypt.hash(Math.random().toString(36), 10);
-
-    await user.save();
-
-    res.json({ message: "Account deleted permanently" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
 export default router;
