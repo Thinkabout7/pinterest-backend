@@ -105,6 +105,8 @@ router.post("/login", async (req, res) => {
         id: user._id,
         username: user.username,
         email: user.email,
+        isDeactivated: user.isDeactivated || false,
+        profilePicture: user.profilePicture || null,
       },
     });
   } catch (err) {
@@ -128,6 +130,7 @@ router.get("/profile", protect, async (req, res) => {
         profilePicture: user.profilePicture || null,
         followers: user.followers,
         following: user.following,
+        isDeactivated: user.isDeactivated || false,
       }
     });
   } catch (err) {
@@ -163,6 +166,7 @@ router.put("/change-username", protect, async (req, res) => {
         username: updated.username,
         email: updated.email,
         profilePicture: updated.profilePicture || null,
+        isDeactivated: updated.isDeactivated || false,
       }
     });
   } catch (err) {
