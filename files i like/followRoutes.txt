@@ -1,3 +1,4 @@
+
 // routes/followRoutes.js
 import express from "express";
 import User from "../models/User.js";
@@ -19,14 +20,6 @@ router.post("/:id/follow", protect, async (req, res) => {
     const me = await User.findById(myId);
     const target = await User.findById(targetId);
     if (!target) return res.status(404).json({ message: "User not found" });
-
-    // 🔥 NEW: cannot follow deactivated users
-    if (target.isDeactivated)
-      return res.status(400).json({ message: "This account is deactivated" });
-
-    // 🔥 NEW: cannot follow deleted users
-    if (target.isDeleted)
-      return res.status(400).json({ message: "This account no longer exists" });
 
     if (me.following.includes(targetId))
       return res.status(400).json({ message: "Already following this user" });
@@ -59,7 +52,6 @@ router.post("/:id/unfollow", protect, async (req, res) => {
 
     const me = await User.findById(myId);
     const target = await User.findById(targetId);
-
     if (!target) return res.status(404).json({ message: "User not found" });
 
     me.following = me.following.filter((u) => u.toString() !== targetId);
@@ -80,17 +72,13 @@ router.post("/:id/unfollow", protect, async (req, res) => {
 // 👀 Followers list
 router.get("/:id/followers", async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate("followers", "username email profilePicture isDeleted isDeactivated");
-
+    const user = await User.findById(req.params.id).populate(
+      "followers",
+      "username email profilePicture"
+    );
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // 🔥 Hide deleted/deactivated accounts
-    const visible = user.followers.filter(
-      (u) => !u.isDeleted && !u.isDeactivated
-    );
-
-    res.status(200).json(visible);
+    res.status(200).json(user.followers);
   } catch (err) {
     console.error("Get followers error:", err);
     res.status(500).json({ message: err.message });
@@ -100,17 +88,13 @@ router.get("/:id/followers", async (req, res) => {
 // 👥 Following list
 router.get("/:id/following", async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate("following", "username email profilePicture isDeleted isDeactivated");
-
+    const user = await User.findById(req.params.id).populate(
+      "following",
+      "username email profilePicture"
+    );
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // 🔥 Hide deleted/deactivated accounts
-    const visible = user.following.filter(
-      (u) => !u.isDeleted && !u.isDeactivated
-    );
-
-    res.status(200).json(visible);
+    res.status(200).json(user.following);
   } catch (err) {
     console.error("Get following error:", err);
     res.status(500).json({ message: err.message });

@@ -1,4 +1,4 @@
-// routes/userRoute.js
+// routes/userRoutes.js
 import express from "express";
 import User from "../models/User.js";
 import Pin from "../models/Pin.js";
@@ -76,7 +76,7 @@ router.get("/:username", async (req, res) => {
 });
 
 
-// Get user's boards ----------
+//Get user's boards ----------
 router.get("/:username/boards", async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
@@ -92,7 +92,6 @@ router.get("/:username/boards", async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
 
 // Get user's saved pins ----------
 router.get("/:username/saved-pins", async (req, res) => {
@@ -111,7 +110,6 @@ router.get("/:username/saved-pins", async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
 
 // Update user profile (including profile picture)
 router.put("/:id", protect, async (req, res) => {
@@ -147,25 +145,5 @@ router.put("/:id", protect, async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
-
-
-// ⭐⭐⭐ ADD-ON YOU ASKED FOR — account status route ⭐⭐⭐
-router.get("/:id/status", async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id)
-      .select("isDeactivated isDeleted");
-
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    res.status(200).json({
-      isDeactivated: user.isDeactivated,
-      isDeleted: user.isDeleted,
-    });
-
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
-});
-
 
 export default router;

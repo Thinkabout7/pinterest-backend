@@ -9,6 +9,8 @@ console.log("CLOUD_NAME:", process.env.CLOUDINARY_CLOUD_NAME? "Exists" : "Missin
 console.log("API_KEY:", process.env.CLOUDINARY_API_KEY? "Exists" : "Missing");
 console.log("TAVILY_API_KEY:", process.env.TAVILY_API_KEY? "Exists" : "Missing");
 console.log("GOOGLE_API_KEY:", process.env.GOOGLE_API_KEY ? "Exists" : "Missing");
+console.log("Registered auth routes:", authRoutes);
+
 // --- Core imports ---
 import express from "express";
 import connectDB from "./config/db.js";
@@ -49,6 +51,14 @@ import uploadRoutes from "./routes/uploadRoutes.js";
 import commentRoutes from "./routes/commentRoutes.js";
 
 // --- Route usage ---
+
+app.use((req, res, next) => {
+  console.log("➡️ RECEIVED:", req.method, req.url);
+  next();
+});
+
+
+
 app.use("/api/auth", authRoutes);
 app.use("/api/pins", pinRoutes);
 app.use("/api/likes", likeRoutes);
@@ -58,11 +68,14 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/feed", feedRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/search", searchRoutes);
-app.use("/api/users", userRoutes);
+
 app.use("/api/saved", SavedPinRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/comments", commentRoutes);
 
+
+//LAST 
+app.use("/api/users", userRoutes);
 // --- Root test route ---
 app.get("/", (req, res) => {
   res.send("✅ Pinterest Backend Running...");

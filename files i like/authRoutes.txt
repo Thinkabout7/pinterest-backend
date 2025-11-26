@@ -7,7 +7,6 @@ import User from "../models/User.js";
 import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
-console.log("🔥 LOADED: authRoutes.js");
 
 // ---------------- REGISTER ----------------
 router.post("/register", async (req, res) => {
@@ -114,6 +113,7 @@ router.post("/login", async (req, res) => {
 });
 
 // ---------------- PROFILE ----------------
+// ---------------- PROFILE ----------------
 router.get("/profile", protect, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select(
@@ -134,108 +134,4 @@ router.get("/profile", protect, async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
-
-
-// ---------------- CHANGE USERNAME ----------------
-router.put("/change-username", protect, async (req, res) => {
-  try {
-    const { newUsername } = req.body;
-
-    if (!newUsername) {
-      return res.status(400).json({ message: "Username required" });
-    }
-
-    const exists = await User.findOne({ username: newUsername });
-    if (exists) {
-      return res.status(400).json({ message: "Username already taken" });
-    }
-
-    const updated = await User.findByIdAndUpdate(
-      req.user._id,
-      { username: newUsername },
-      { new: true }
-    );
-
-    res.json({
-      message: "Username updated",
-      user: {
-        id: updated._id,
-        username: updated.username,
-        email: updated.email,
-        profilePicture: updated.profilePicture || null,
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// ---------------- CHANGE PASSWORD ----------------
-router.put("/change-password", protect, async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ message: "Missing fields" });
-    }
-
-    const user = await User.findById(req.user._id);
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-
-    if (!isMatch) {
-      return res.status(400).json({ message: "Incorrect current password" });
-    }
-
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
-
-    res.json({ message: "Password updated successfully" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// ---------------- DEACTIVATE ACCOUNT (TEMP) ----------------
-router.put("/deactivate", protect, async (req, res) => {
-  try {
-    await User.findByIdAndUpdate(req.user._id, { isDeactivated: true });
-
-    res.json({ message: "Account deactivated" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// ---------------- REACTIVATE ACCOUNT ----------------
-router.put("/reactivate", protect, async (req, res) => {
-  try {
-    await User.findByIdAndUpdate(req.user._id, { isDeactivated: false });
-
-    res.json({ message: "Account reactivated" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// ---------------- DELETE ACCOUNT (PERMANENT) ----------------
-router.delete("/delete-account", protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id);
-
-    user.isDeleted = true;
-    user.isDeactivated = true;
-
-    const id = user._id.toString();
-    user.username = `deleted_${id}`;
-    user.email = `deleted_${id}@deleted.local`;
-    user.password = await bcrypt.hash(Math.random().toString(36), 10);
-
-    await user.save();
-
-    res.json({ message: "Account deleted permanently" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
 export default router;
