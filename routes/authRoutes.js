@@ -82,12 +82,7 @@ router.post("/login", async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-     // ⛔ NEW: block deactivated accounts
-    if (user.isDeactivated === true) {
-      return res
-        .status(403)
-        .json({ message: "Your account is deactivated" });
-    }
+   
     
     
     

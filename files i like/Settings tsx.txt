@@ -1,0 +1,357 @@
+import { useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+
+const Settings = () => {
+  const {
+    user,
+    updateUser,
+    logout,
+    changeUsername,
+    changePassword,
+    deactivateAccount,
+    reactivateAccount,
+    deleteAccount,
+  } = useAuth();
+
+  const { toast } = useToast();
+
+  // dialogs
+  const [openDeactivate, setOpenDeactivate] = useState(false);
+  const [openUsername, setOpenUsername] = useState(false);
+  const [openPassword, setOpenPassword] = useState(false);
+  const [openDelete, setOpenDelete] = useState(false);
+  const [openConfirmPassSave, setOpenConfirmPassSave] = useState(false);
+
+  // fields
+  const [newUsername, setNewUsername] = useState(user?.username || "");
+  const [oldPass, setOldPass] = useState("");
+  const [newPass, setNewPass] = useState("");
+
+  /* =========================================
+      CHANGE USERNAME
+  ========================================= */
+  const handleUsername = async () => {
+    const result = await changeUsername(newUsername);
+
+    if (result.error) {
+      return toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      });
+    }
+
+    toast({
+      title: "Username updated",
+      description: "Your username was successfully changed.",
+    });
+
+    setOpenUsername(false);
+  };
+
+  /* =========================================
+      CHANGE PASSWORD
+  ========================================= */
+  const handlePassword = async () => {
+    const result = await changePassword(oldPass, newPass);
+
+    if (result.error) {
+      return toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      });
+    }
+
+    toast({
+      title: "Password updated",
+      description: "Your password has been changed.",
+    });
+
+    setOpenConfirmPassSave(false);
+    setOpenPassword(false);
+    setOldPass("");
+    setNewPass("");
+  };
+
+  /* =========================================
+      DEACTIVATE ACCOUNT
+  ========================================= */
+  const handleDeactivate = async () => {
+    const result = await deactivateAccount();
+
+    if (result.error) {
+      return toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      });
+    }
+
+    toast({
+      title: "Account Deactivated",
+      description: "Your account has been hidden.",
+    });
+
+    setOpenDeactivate(false);
+    logout();
+  };
+
+  /* =========================================
+      REACTIVATE ACCOUNT
+  ========================================= */
+  const handleReactivate = async () => {
+    const result = await reactivateAccount();
+
+    if (result.error) {
+      return toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      });
+    }
+
+    updateUser({ isDeactivated: false });
+
+    toast({
+      title: "Account Reactivated",
+      description: "Welcome back!",
+    });
+  };
+
+  /* =========================================
+      DELETE ACCOUNT
+  ========================================= */
+  const handleDelete = async () => {
+    const result = await deleteAccount();
+
+    if (result.error) {
+      return toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      });
+    }
+
+    toast({
+      title: "Account deleted",
+      description: "Your account has been permanently removed.",
+    });
+
+    setOpenDelete(false);
+    logout();
+  };
+
+  return (
+    <div className="max-w-3xl mx-auto p-6 space-y-6">
+      <div className="flex items-center gap-3">
+        <h1 className="text-3xl font-bold">Settings</h1>
+
+        {user?.isDeactivated ? (
+          <span className="px-3 py-1 text-sm rounded-full bg-orange-500 text-white">
+            🔒 Deactivated
+          </span>
+        ) : (
+          <span className="px-3 py-1 text-sm rounded-full bg-green-500 text-white">
+            ● Active
+          </span>
+        )}
+      </div>
+
+      {/* USERNAME */}
+      <Card className="border bg-card">
+        <CardHeader>
+          <CardTitle>Change Username</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => setOpenUsername(true)}>
+            Change Username
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* PASSWORD */}
+      <Card className="border bg-card">
+        <CardHeader>
+          <CardTitle>Change Password</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => setOpenPassword(true)}>
+            Change Password
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* REACTIVATE / DEACTIVATE */}
+      {!user?.isDeactivated ? (
+        <Card className="border bg-card">
+          <CardHeader>
+            <CardTitle>Deactivate Account</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="secondary"
+              onClick={() => setOpenDeactivate(true)}
+            >
+              Deactivate Account
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border bg-card">
+          <CardHeader>
+            <CardTitle>Reactivate Account</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button
+              className="bg-green-600 text-white"
+              onClick={handleReactivate}
+            >
+              Reactivate
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* DELETE */}
+      <Card className="border bg-card">
+        <CardHeader>
+          <CardTitle>Delete Account</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Button
+            variant="destructive"
+            onClick={() => setOpenDelete(true)}
+          >
+            Delete Account
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* ========================== DIALOGS ========================== */}
+
+      {/* DEACTIVATE */}
+      <Dialog open={openDeactivate} onOpenChange={setOpenDeactivate}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deactivate Account</DialogTitle>
+          </DialogHeader>
+
+          <p className="text-sm text-muted-foreground mb-4">
+            Your profile will be hidden until you log in again.
+          </p>
+
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={handleDeactivate}
+          >
+            Confirm Deactivation
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* CHANGE USERNAME */}
+      <Dialog open={openUsername} onOpenChange={setOpenUsername}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Username</DialogTitle>
+          </DialogHeader>
+
+          <Input
+            value={newUsername}
+            onChange={(e) => setNewUsername(e.target.value)}
+          />
+
+          <Button className="w-full mt-3" onClick={handleUsername}>
+            Save
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* CHANGE PASSWORD */}
+      <Dialog open={openPassword} onOpenChange={setOpenPassword}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Password</DialogTitle>
+          </DialogHeader>
+
+          <Input
+            type="password"
+            placeholder="Current password"
+            value={oldPass}
+            onChange={(e) => setOldPass(e.target.value)}
+          />
+
+          <Input
+            className="mt-2"
+            type="password"
+            placeholder="New password"
+            value={newPass}
+            onChange={(e) => setNewPass(e.target.value)}
+          />
+
+          <Button
+            className="w-full mt-3"
+            onClick={() => setOpenConfirmPassSave(true)}
+          >
+            Continue
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* CONFIRM PASSWORD */}
+      <Dialog
+        open={openConfirmPassSave}
+        onOpenChange={setOpenConfirmPassSave}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Password Change</DialogTitle>
+          </DialogHeader>
+
+          <p className="text-sm text-muted-foreground mb-4">
+            Are you sure you want to update your password?
+          </p>
+
+          <Button className="w-full" onClick={handlePassword}>
+            Yes, update it
+          </Button>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE ACCOUNT */}
+      <Dialog open={openDelete} onOpenChange={setOpenDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Account Permanently</DialogTitle>
+          </DialogHeader>
+
+          <p className="text-sm text-muted-foreground mb-4">
+            This action cannot be undone.
+          </p>
+
+          <Button
+            variant="destructive"
+            className="w-full"
+            onClick={handleDelete}
+          >
+            Delete Forever
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default Settings;
