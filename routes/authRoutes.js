@@ -117,9 +117,9 @@ router.post("/login", async (req, res) => {
 router.get("/profile", protect, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select(
-      "_id username email profilePicture followers following"
+      "_id username email profilePicture followers following isDeactivated"
     );
-
+ 
     res.json({
       user: {
         _id: user._id,
