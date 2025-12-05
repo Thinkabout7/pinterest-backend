@@ -14,17 +14,11 @@ router.post(
   upload.single("profilePicture"),
   async (req, res) => {
     try {
-      // Block deactivated / deleted users from changing picture
-      if (req.user?.isDeactivated || req.user?.isDeleted) {
-        return res
-          .status(403)
-          .json({ message: "Account is deactivated. Reactivate to continue." });
-      }
-
       if (!req.file || !req.file.path) {
         return res.status(400).json({ message: "Upload failed" });
       }
 
+      // Cloudinary URL
       const fileUrl = req.file.path;
 
       const updatedUser = await User.findByIdAndUpdate(
@@ -34,7 +28,7 @@ router.post(
       );
 
       return res.status(200).json({
-        fileUrl, // ⭐ IMPORTANT: FRONTEND EXPECTS THIS
+        fileUrl,                // ⭐ IMPORTANT: FRONTEND EXPECTS THIS
         user: updatedUser,
       });
     } catch (error) {

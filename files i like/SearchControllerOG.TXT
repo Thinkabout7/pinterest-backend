@@ -1,4 +1,4 @@
-// controllers/searchController.js
+//searchController.js
 import Pin from "../models/Pin.js";
 import User from "../models/User.js";
 
@@ -12,69 +12,57 @@ export const searchPins = async (req, res) => {
         .json({ message: "Please provide a search query (?q=...)" });
     }
 
-    // Block deactivated / deleted logged-in users from searching at all
-    if (req.user && (req.user.isDeactivated || req.user.isDeleted)) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const q = query.toLowerCase();
 
     // ---- 1) FETCH CANDIDATES (match ANY field) ----
-    const pinsRaw = await Pin.find({
+    const pins = await Pin.find({
       $or: [
         { title: { $regex: q, $options: "i" } },
         { description: { $regex: q, $options: "i" } },
         { category: { $regex: q, $options: "i" } },
         { tags: { $regex: q, $options: "i" } },
       ],
-    }).populate({
-      path: "user",
-      select: "username profilePicture isDeactivated isDeleted",
-      match: { isDeactivated: false, isDeleted: false },
-    });
-
-    // Hide pins whose owners are deactivated/deleted
-    const pins = pinsRaw.filter((p) => p.user);
+    }).populate("user", "username profilePicture");
 
     // ---- 2) SCORE EACH PIN ----
-    const scored = pins.map((pin) => {
+    const scored = pins.map(pin => {
       let score = 0;
 
       const title = pin.title?.toLowerCase() || "";
       const desc = pin.description?.toLowerCase() || "";
-      const cat = pin.category?.toLowerCase() || "";
-      const tags = pin.tags?.map((t) => t.toLowerCase()) || [];
+      const cat  = pin.category?.toLowerCase() || "";
+      const tags = pin.tags?.map(t => t.toLowerCase()) || [];
 
-      if (title.includes(q)) score += 50;
-      if (title.startsWith(q)) score += 20;
-      if (title === q) score += 35;
+      // ⭐ TEXT MATCH WEIGHTS
+      if (title.includes(q)) score += 50;             // title contains
+      if (title.startsWith(q)) score += 20;           // title starts with
+      if (title === q) score += 35;                   // exact title match
 
-      if (desc.includes(q)) score += 30;
+      if (desc.includes(q)) score += 30;              // description contains
       if (desc.startsWith(q)) score += 10;
 
-      if (cat.includes(q)) score += 15;
+      if (cat.includes(q)) score += 15;               // category match
       if (cat === q) score += 20;
 
-      if (tags.includes(q)) score += 40;
-      if (tags.some((t) => t.includes(q))) score += 25;
+      // ⭐ TAG MATCH WEIGHTS
+      if (tags.includes(q)) score += 40;              // exact tag match
+      if (tags.some(t => t.includes(q))) score += 25; // partial tag match
 
+      // ⭐ POPULARITY BOOST (like Pinterest)
       score += (pin.likesCount || 0) * 3;
       score += (pin.commentsCount || 0) * 2;
 
       return { pin, score };
     });
 
+    // ---- 3) SORT DESCENDING (Best → Worst) ----
     scored.sort((a, b) => b.score - a.score);
 
-    const sortedPins = scored.map((s) => s.pin);
+    const sortedPins = scored.map(s => s.pin);
 
     // ---- 4) USER SEARCH ----
     const users = await User.find({
       username: { $regex: q, $options: "i" },
-      isDeleted: false,
-      isDeactivated: false,
     }).select("username profilePicture email");
 
     // ---- 5) FINAL RESPONSE ----
@@ -83,6 +71,7 @@ export const searchPins = async (req, res) => {
       pins: sortedPins,
       users,
     });
+
   } catch (err) {
     console.error("Search Error:", err);
     res.status(500).json({ message: err.message });

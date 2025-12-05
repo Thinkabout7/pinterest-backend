@@ -69,17 +69,10 @@ export const createPin = async (req, res) => {
 export const getAllPins = async (req, res) => {
   try {
     const pins = await Pin.find()
-      .populate({
-        path: "user",
-        select: "username email profilePicture isDeactivated isDeleted",
-        match: { isDeactivated: false, isDeleted: false }
-      })
+      .populate("user", "username email profilePicture")
       .sort({ createdAt: -1 });
 
-    // PATCH B — hide pins where user is null
-    const filteredPins = pins.filter(p => p.user !== null);
-
-    res.status(200).json(filteredPins);
+    res.status(200).json(pins);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -88,14 +81,12 @@ export const getAllPins = async (req, res) => {
 //  Get only pin doc
 export const getPinById = async (req, res) => {
   try {
-    const pin = await Pin.findById(req.params.id).populate({
-      path: "user",
-      select: "username email profilePicture isDeactivated isDeleted",
-      match: { isDeactivated: false, isDeleted: false }
-    });
+    const pin = await Pin.findById(req.params.id).populate(
+      "user",
+      "username email profilePicture"
+    );
 
-    // If pin exists but user is deactivated → hide it
-    if (!pin || pin.user === null) {
+    if (!pin) {
       return res.status(404).json({ message: "Pin not found" });
     }
 
@@ -109,27 +100,16 @@ export const getPinById = async (req, res) => {
 export const getFullPin = async (req, res) => {
   try {
     const pinDoc = await Pin.findById(req.params.id)
-      .populate({
-        path: "user",
-        select: "_id username profilePicture isDeactivated isDeleted",
-        match: { isDeactivated: false, isDeleted: false }
-      })
+      .populate("user", "_id username profilePicture")
       .lean();
 
-    // PATCH — hide full pin view for deactivated users
-    if (!pinDoc || pinDoc.user === null) {
-      return res.status(404).json({ message: "Pin not found" });
-    }
+    if (!pinDoc) return res.status(404).json({ message: "Pin not found" });
 
     const likes = await Like.find({ pin: pinDoc._id })
-      .populate({
-        path: "user",
-        select: "_id username profilePicture isDeactivated isDeleted",
-        match: { isDeactivated: false, isDeleted: false }
-      })
+      .populate("user", "_id username profilePicture")
       .lean();
 
-    const likesUsers = likes.map((l) => l.user).filter(u => u !== null);
+    const likesUsers = likes.map((l) => l.user);
     const likesCount = likesUsers.length;
     const commentsCount = pinDoc.commentsCount || 0;
 

@@ -1,81 +1,30 @@
 // routes/likeRoutes.js
 import express from "express";
-import Like from "../models/Like.js";
-import Pin from "../models/Pin.js";
 import protect from "../middleware/authMiddleware.js";
-import Notification from "../models/Notification.js";
+import {
+  likePin,
+  unlikePin,
+  getPinLikes,
+} from "../controllers/likeController.js";
 
 const router = express.Router();
 
-// ❤️ Like a pin
-router.post("/:pinId", protect, async (req, res) => {
-  try {
-    const pin = await Pin.findById(req.params.pinId);
-    if (!pin) return res.status(404).json({ message: "Pin not found" });
-
-    // prevent duplicate likes
-    const existing = await Like.findOne({ user: req.user._id, pin: pin._id });
-    if (existing) return res.status(400).json({ message: "Already liked" });
-
-    const like = await Like.create({ user: req.user._id, pin: pin._id });
-
-    // 🔔 Notify pin owner — but never notify self
-    if (pin.user.toString() !== req.user._id.toString()) {
-      await Notification.create({
-        recipient: pin.user,
-        sender: req.user._id,
-        type: "like",
-        pin: pin._id,
-        message: `${req.user.username} liked your pin "${pin.title}".`,
-      });
-    }
-
-    res.status(201).json(like);
-  } catch (err) {
-    console.error("Like error:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
+// ❤ Like a pin
+router.post("/:pinId", protect, likePin);
 
 // 💔 Unlike a pin
-router.delete("/:pinId", protect, async (req, res) => {
-  try {
-    const like = await Like.findOneAndDelete({
-      user: req.user._id,
-      pin: req.params.pinId,
-    });
+router.delete("/:pinId", protect, unlikePin);
 
-    if (!like) return res.status(404).json({ message: "Like not found" });
+// 👥 Get users who liked a pin  (filtered for deactivated users)
+router.get("/:pinId/users", protect, getPinLikes);
 
-    res.status(200).json({ message: "Unliked successfully" });
-  } catch (err) {
-    console.error("Unlike error:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// 🔢 Like count ONLY
+// 🔢 Get like count only
 router.get("/:pinId", async (req, res) => {
   try {
-    const count = await Like.countDocuments({ pin: req.params.pinId });
-    res.status(200).json({ pinId: req.params.pinId, likes: count });
+    const result = await getPinLikes(req, res); // reuse controller logic
+    if (!result || !Array.isArray(result)) return; 
   } catch (err) {
     console.error("Like count error:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-// 👥 Get users who liked a pin
-router.get("/:pinId/users", async (req, res) => {
-  try {
-    const likes = await Like.find({ pin: req.params.pinId }).populate(
-      "user",
-      "username email profilePicture"
-    );
-    const users = likes.map((l) => l.user);
-    res.status(200).json(users);
-  } catch (err) {
-    console.error("Get likers error:", err);
     res.status(500).json({ message: err.message });
   }
 });

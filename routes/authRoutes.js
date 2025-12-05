@@ -64,28 +64,34 @@ router.post("/register", async (req, res) => {
 router.post("/login", async (req, res) => {
   try {
     console.log("Raw request body:", req.body);
-    let { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email/Username and password required" });
+    // Accept BOTH email and username
+    let { email, username, password } = req.body;
+
+    if ((!email && !username) || !password) {
+      return res
+        .status(400)
+        .json({ message: "Email/Username and password required" });
     }
 
     password = String(password);
 
-    // 🔥 Allow login with email OR username
-    const user = await User.findOne({
-      $or: [{ email: email }, { username: email }]
-    });
+    // Build search conditions based on what was sent
+    const conditions = [];
+    if (email) {
+      conditions.push({ email: email.toLowerCase() });
+    }
+    if (username) {
+      conditions.push({ username });
+    }
+
+    const user = await User.findOne({ $or: conditions });
 
     if (!user) {
-      console.log("❌ No user found for:", email);
+      console.log("❌ No user found for:", email || username);
       return res.status(404).json({ message: "User not found" });
     }
 
-   
-    
-    
-    
     console.log("✅ Found user:", user.email);
     console.log("Incoming password:", password);
     console.log("Stored hash:", user.password);
@@ -94,7 +100,7 @@ router.post("/login", async (req, res) => {
     console.log("Password match result:", isMatch);
 
     if (!isMatch) {
-      console.log("❌ Password mismatch for user:", email);
+      console.log("❌ Password mismatch for:", email || username);
       return res.status(400).json({ message: "Invalid credentials" });
     }
 

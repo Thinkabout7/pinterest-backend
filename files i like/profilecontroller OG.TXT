@@ -3,22 +3,17 @@ import User from "../models/User.js";
 
 export const updateProfile = async (req, res) => {
   try {
-    // Block deactivated / deleted users from changing profile
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const updates = {};
 
     if (req.body.profilePicture !== undefined) {
       updates.profilePicture = req.body.profilePicture; // "" clears image
     }
 
-    const updatedUser = await User.findByIdAndUpdate(req.user._id, updates, {
-      new: true,
-    });
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      updates,
+      { new: true }
+    );
 
     return res.status(200).json({
       user: updatedUser,

@@ -49,7 +49,7 @@ import userRoutes from "./routes/userRoute.js";
 import SavedPinRoutes from "./routes/SavedPinRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import commentRoutes from "./routes/commentRoutes.js";
-
+import accountRoutes from "./routes/accountRoutes.js";
 // --- Route usage ---
 
 app.use((req, res, next) => {
@@ -72,7 +72,7 @@ app.use("/api/search", searchRoutes);
 app.use("/api/saved", SavedPinRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/comments", commentRoutes);
-
+app.use("/api/account", accountRoutes);
 
 //LAST 
 app.use("/api/users", userRoutes);

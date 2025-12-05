@@ -1,27 +1,44 @@
-//middleware/authMiddleware.js
+// middleware/authMiddleware.js
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
-// Middleware to protect routes
 const protect = async (req, res, next) => {
   try {
-    // 1️⃣ Get token from header
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ message: "No token, authorization denied" });
     }
 
-    // 2️⃣ Extract token
     const token = authHeader.split(" ")[1];
-
-    // 3️⃣ Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // 4️⃣ Attach user to request (without password)
+    // Attach user data
     req.user = await User.findById(decoded.id).select("-password");
 
-    next(); // ✅ continue to the next function
+    if (!req.user) {
+      return res.status(401).json({ message: "User no longer exists" });
+    }
+
+    // ❌ Block deleted users
+    if (req.user.isDeleted) {
+      return res.status(403).json({ message: "Account no longer exists" });
+    }
+
+    // ❌ Block deactivated users from doing *anything*
+    // except: /settings, /logout, /reactivate
+    const allowedPaths = ["/settings", "/reactivate", "/logout"];
+
+    if (
+      req.user.isDeactivated &&
+      !allowedPaths.some((p) => req.path.startsWith(p))
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Account is deactivated. Reactivate to continue." });
+    }
+
+    next();
   } catch (error) {
     console.error(error);
     res.status(401).json({ message: "Invalid or expired token" });

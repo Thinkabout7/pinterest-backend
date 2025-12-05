@@ -20,10 +20,10 @@ router.get("/pin/:pinId", protect, getCommentsForPin);
 // Delete comment + all its replies
 router.delete("/:id", protect, deleteComment);
 
-// Toggle like on comment
+// Toggle like on a comment
 router.post("/:commentId/like", protect, toggleLike);
 
-// Get users who liked a comment (for reactions modal)
-router.get("/:commentId/likes", getCommentLikes);
+// Get users who liked a comment (BLOCK deactivated users)
+router.get("/:commentId/likes", protect, getCommentLikes);
 
 export default router;

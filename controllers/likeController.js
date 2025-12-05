@@ -5,13 +5,28 @@ import Notification from "../models/Notification.js";
 
 export const likePin = async (req, res) => {
   try {
-    const pin = await Pin.findById(req.params.pinId);
-    if (!pin) return res.status(404).json({ message: "Pin not found" });
+    // BLOCK deactivated/deleted users
+    if (req.user?.isDeactivated || req.user?.isDeleted) {
+      return res
+        .status(403)
+        .json({ message: "Account is deactivated. Reactivate to continue." });
+    }
+
+    const pin = await Pin.findById(req.params.pinId).populate({
+      path: "user",
+      select: "isDeactivated isDeleted",
+    });
+
+    // Hide pins owned by deactivated/deleted users
+    if (!pin || !pin.user || pin.user.isDeactivated || pin.user.isDeleted) {
+      return res.status(404).json({ message: "Pin not found" });
+    }
 
     const existing = await Like.findOne({
       user: req.user._id,
       pin: pin._id,
     });
+
     if (existing) {
       return res.status(400).json({ message: "Already liked" });
     }
@@ -21,9 +36,9 @@ export const likePin = async (req, res) => {
     pin.likesCount += 1;
     await pin.save();
 
-    if (pin.user.toString() !== req.user._id.toString()) {
+    if (String(pin.user._id) !== String(req.user._id)) {
       await Notification.create({
-        recipient: pin.user,
+        recipient: pin.user._id,
         sender: req.user._id,
         type: "like",
         pin: pin._id,
@@ -39,6 +54,13 @@ export const likePin = async (req, res) => {
 
 export const unlikePin = async (req, res) => {
   try {
+    // BLOCK deactivated/deleted users
+    if (req.user?.isDeactivated || req.user?.isDeleted) {
+      return res
+        .status(403)
+        .json({ message: "Account is deactivated. Reactivate to continue." });
+    }
+
     const like = await Like.findOneAndDelete({
       user: req.user._id,
       pin: req.params.pinId,
@@ -60,14 +82,31 @@ export const unlikePin = async (req, res) => {
 
 export const getPinLikes = async (req, res) => {
   try {
-    const pin = await Pin.findById(req.params.pinId);
-    if (!pin) return res.status(404).json({ message: "Pin not found" });
+    // BLOCK deactivated/deleted users
+    if (req.user?.isDeactivated || req.user?.isDeleted) {
+      return res
+        .status(403)
+        .json({ message: "Account is deactivated. Reactivate to continue." });
+    }
 
-    const likes = await Like.find({ pin: pin._id })
-      .populate("user", "_id username profilePicture");
+    const pin = await Pin.findById(req.params.pinId).populate({
+      path: "user",
+      select: "isDeactivated isDeleted",
+    });
 
-    const users = likes.map((l) => l.user);
-    res.status(200).json(users); // IMPORTANT: just array for frontend
+    if (!pin || !pin.user || pin.user.isDeactivated || pin.user.isDeleted) {
+      return res.status(404).json({ message: "Pin not found" });
+    }
+
+    const likes = await Like.find({ pin: pin._id }).populate({
+      path: "user",
+      select: "_id username profilePicture isDeactivated isDeleted",
+      match: { isDeactivated: false, isDeleted: false },
+    });
+
+    const users = likes.map((l) => l.user).filter(Boolean);
+
+    res.status(200).json(users);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -2,48 +2,25 @@
 import Comment from "../models/Comment.js";
 import Pin from "../models/Pin.js";
 import CommentLike from "../models/CommentLike.js";
-import Notification from "../models/Notification.js";
+import Notification from "../models/Notification.js";   // 🔔 NOTIF IMPORT
 
 /* --------------------------------------------------
    CREATE COMMENT OR REPLY (SAFE + CORRECT)
 -------------------------------------------------- */
 export const createComment = async (req, res) => {
   try {
-    // BLOCK deactivated/deleted users
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const { pinId, text, parentCommentId } = req.body;
     if (!text?.trim()) {
       return res.status(400).json({ message: "Text required" });
     }
 
-    // Prevent commenting on deactivated/deleted owner's pins
-    const pinCheck = await Pin.findById(pinId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted"
-    });
-
-    if (!pinCheck || !pinCheck.user || pinCheck.user.isDeactivated || pinCheck.user.isDeleted) {
-      return res.status(404).json({ message: "Pin not found" });
-    }
-
     let replyToUser = null;
 
+    // If replying, store parent.user ObjectId
     let parent = null;
     if (parentCommentId) {
-      parent = await Comment.findById(parentCommentId).populate({
-        path: "user",
-        select: "isDeactivated isDeleted"
-      });
-
-      // Hide replies to comments of deactivated users
-      if (!parent || !parent.user || parent.user.isDeactivated || parent.user.isDeleted) {
-        return res.status(404).json({ message: "Comment not found" });
-      }
-
-      replyToUser = parent.user;
+      parent = await Comment.findById(parentCommentId);
+      if (parent?.user) replyToUser = parent.user;
     }
 
     const newComment = await Comment.create({
@@ -54,7 +31,7 @@ export const createComment = async (req, res) => {
       replyToUser,
     });
 
-    // Increment comment count
+    // Update comment count on Pin
     const pin = await Pin.findByIdAndUpdate(
       pinId,
       { $inc: { commentsCount: 1 } },
@@ -65,6 +42,7 @@ export const createComment = async (req, res) => {
        🔔 NOTIFICATIONS
     -------------------------------------------------- */
 
+    // 1️⃣ Commented on someone's pin
     if (pin && String(pin.user) !== String(req.user._id) && !parentCommentId) {
       await Notification.create({
         recipient: pin.user,
@@ -75,9 +53,10 @@ export const createComment = async (req, res) => {
       });
     }
 
-    if (parent && String(parent.user._id) !== String(req.user._id)) {
+    // 2️⃣ Replied to someone's comment
+    if (parent && String(parent.user) !== String(req.user._id)) {
       await Notification.create({
-        recipient: parent.user._id,
+        recipient: parent.user,
         sender: req.user._id,
         type: "comment",
         pin: pin._id,
@@ -86,21 +65,19 @@ export const createComment = async (req, res) => {
     }
 
     const populated = await Comment.findById(newComment._id)
-      .populate({
-        path: "user",
-        select: "username profilePicture isDeactivated isDeleted",
-        match: { isDeactivated: false, isDeleted: false }
-      })
+      .populate("user", "username profilePicture")
       .populate("replyToUser", "username");
 
-    if (!populated.user) {
-      return res.status(404).json({ message: "Comment not found" });
-    }
+    const safeUser = populated.user || {
+      _id: "deleted",
+      username: "Deleted User",
+      profilePicture: null,
+    };
 
     res.status(201).json({
       _id: populated._id,
       text: populated.text,
-      user: populated.user,
+      user: safeUser,
       replyToUsername: populated.replyToUser?.username || null,
       createdAt: populated.createdAt,
       likesCount: 0,
@@ -117,29 +94,25 @@ export const createComment = async (req, res) => {
 -------------------------------------------------- */
 export const getCommentsForPin = async (req, res) => {
   try {
-    // BLOCK deactivated/deleted users from viewing comments
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const list = await Comment.find({ pin: req.params.pinId })
-      .populate({
-        path: "user",
-        select: "username profilePicture isDeactivated isDeleted",
-        match: { isDeactivated: false, isDeleted: false }
-      })
+      .populate("user", "username profilePicture")
       .populate("replyToUser", "username")
       .sort({ createdAt: 1 })
       .lean();
 
     const userId = req.user?._id || null;
     const map = {};
-    const filtered = list.filter((c) => c.user != null);
 
-    // FIRST PASS
-    for (const c of filtered) {
+    // FIRST PASS — build map
+    for (const c of list) {
       const key = String(c._id);
       const parentKey = c.parentCommentId ? String(c.parentCommentId) : null;
+
+      const safeUser = c.user || {
+        _id: "deleted",
+        username: "Deleted User",
+        profilePicture: null,
+      };
 
       const isLiked = userId
         ? Boolean(await CommentLike.exists({ user: userId, comment: c._id }))
@@ -148,7 +121,7 @@ export const getCommentsForPin = async (req, res) => {
       map[key] = {
         _id: key,
         text: c.text,
-        user: c.user,
+        user: safeUser,
         replyToUsername: c.replyToUser?.username || null,
         likesCount: c.likesCount || 0,
         isLiked,
@@ -158,7 +131,7 @@ export const getCommentsForPin = async (req, res) => {
       };
     }
 
-    // SECOND PASS
+    // SECOND PASS — attach replies
     const roots = [];
 
     for (const key in map) {
@@ -174,7 +147,7 @@ export const getCommentsForPin = async (req, res) => {
 
     res.json({
       comments: roots,
-      totalCount: filtered.length,
+      totalCount: list.length,
     });
   } catch (err) {
     console.error("getCommentsForPin error:", err);
@@ -187,11 +160,6 @@ export const getCommentsForPin = async (req, res) => {
 -------------------------------------------------- */
 export const deleteComment = async (req, res) => {
   try {
-    // BLOCK deactivated/deleted users
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const comment = await Comment.findById(req.params.id);
     if (!comment) return res.status(404).json({ message: "Not found" });
 
@@ -217,25 +185,15 @@ export const deleteComment = async (req, res) => {
 -------------------------------------------------- */
 export const toggleLike = async (req, res) => {
   try {
-    // BLOCK deactivated/deleted
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
-    const comment = await Comment.findById(req.params.commentId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted",
-    });
-
-    if (!comment || !comment.user || comment.user.isDeactivated || comment.user.isDeleted) {
-      return res.status(404).json({ message: "Comment not found" });
-    }
+    const comment = await Comment.findById(req.params.commentId);
+    if (!comment) return res.status(404).json({ message: "Not found" });
 
     const existing = await CommentLike.findOne({
       user: req.user._id,
       comment: comment._id,
     });
 
+    // UNLIKE
     if (existing) {
       await CommentLike.deleteOne({ _id: existing._id });
       comment.likesCount = Math.max(0, comment.likesCount - 1);
@@ -243,6 +201,7 @@ export const toggleLike = async (req, res) => {
       return res.json({ likesCount: comment.likesCount, isLiked: false });
     }
 
+    // LIKE
     await CommentLike.create({
       user: req.user._id,
       comment: comment._id,
@@ -251,9 +210,12 @@ export const toggleLike = async (req, res) => {
     comment.likesCount += 1;
     await comment.save();
 
-    if (String(comment.user._id) !== String(req.user._id)) {
+    /* --------------------------------------------------
+       🔔 NOTIFY COMMENT OWNER (if not self)
+    -------------------------------------------------- */
+    if (String(comment.user) !== String(req.user._id)) {
       await Notification.create({
-        recipient: comment.user._id,
+        recipient: comment.user,
         sender: req.user._id,
         type: "comment",
         pin: comment.pin,
@@ -269,24 +231,17 @@ export const toggleLike = async (req, res) => {
 };
 
 /* --------------------------------------------------
-   GET USERS WHO LIKED A COMMENT
+   GET USERS WHO LIKED A COMMENT (FOR REACTION MODAL)
 -------------------------------------------------- */
 export const getCommentLikes = async (req, res) => {
   try {
-    // BLOCK deactivated/deleted
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const list = await CommentLike.find({
       comment: req.params.commentId,
-    }).populate({
-      path: "user",
-      select: "_id username profilePicture isDeactivated isDeleted",
-      match: { isDeactivated: false, isDeleted: false }
-    });
+    }).populate("user", "_id username profilePicture");
 
-    const users = list.map((l) => l.user).filter(Boolean);
+    const users = list
+      .map((l) => l.user)
+      .filter(Boolean);
 
     res.json({ users });
   } catch (err) {

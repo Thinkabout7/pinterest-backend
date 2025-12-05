@@ -4,19 +4,8 @@ import Comment from "../models/Comment.js";
 
 export const likeComment = async (req, res) => {
   try {
-    // BLOCK deactivated/deleted
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
-    const comment = await Comment.findById(req.params.commentId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted",
-    });
-
-    if (!comment || !comment.user || comment.user.isDeactivated || comment.user.isDeleted) {
-      return res.status(404).json({ message: "Comment not found" });
-    }
+    const comment = await Comment.findById(req.params.commentId);
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
     const existing = await CommentLike.findOne({
       user: req.user._id,
@@ -24,6 +13,7 @@ export const likeComment = async (req, res) => {
     });
 
     if (existing) {
+      // already liked → just return current state (idempotent)
       return res.status(200).json({
         success: true,
         likesCount: comment.likesCount,
@@ -46,17 +36,13 @@ export const likeComment = async (req, res) => {
 
 export const unlikeComment = async (req, res) => {
   try {
-    // BLOCK deactivated/deleted
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const like = await CommentLike.findOneAndDelete({
       user: req.user._id,
       comment: req.params.commentId,
     });
 
     if (!like) {
+      // nothing to unlike → ok but no change
       return res.status(200).json({ message: "Not liked yet" });
     }
 
@@ -77,23 +63,18 @@ export const unlikeComment = async (req, res) => {
 
 export const getCommentLikes = async (req, res) => {
   try {
-    // BLOCK deactivated/deleted
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
+    const comment = await Comment.findById(req.params.commentId);
+    if (!comment) return res.status(404).json({ message: "Comment not found" });
 
-    const likes = await CommentLike.find({
-      comment: req.params.commentId,
-    }).populate({
-      path: "user",
-      select: "_id username profilePicture isDeactivated isDeleted",
-      match: { isDeactivated: false, isDeleted: false }
-    });
+    const likes = await CommentLike.find({ comment: comment._id }).populate(
+      "user",
+      "_id username profilePicture"
+    );
 
-    const users = likes.map((l) => l.user).filter(Boolean);
+    const users = likes.map((like) => like.user);
 
     res.status(200).json({
-      likesCount: users.length,
+      likesCount: comment.likesCount,
       users,
     });
   } catch (error) {

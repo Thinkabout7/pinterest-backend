@@ -15,22 +15,8 @@ router.post("/profile/:pinId", protect, async (req, res) => {
     const { pinId } = req.params;
     const userId = req.user._id;
 
-    // BLOCK deactivated / deleted users from saving
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
-    // Also do not allow saving pins from deactivated/deleted owners
-    const pin = await Pin.findById(pinId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted",
-    });
-
-    if (!pin || !pin.user || pin.user.isDeactivated || pin.user.isDeleted) {
-      return res.status(404).json({ message: "Pin not found" });
-    }
+    const pin = await Pin.findById(pinId);
+    if (!pin) return res.status(404).json({ message: "Pin not found" });
 
     const alreadySaved = await SavedPin.findOne({ user: userId, pin: pinId });
     if (alreadySaved)
@@ -56,13 +42,6 @@ router.delete("/profile/:pinId", protect, async (req, res) => {
     const { pinId } = req.params;
     const userId = req.user._id;
 
-    // BLOCK deactivated / deleted users from unsaving
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const removed = await SavedPin.findOneAndDelete({ user: userId, pin: pinId });
     if (!removed)
       return res.status(404).json({ message: "Pin was not saved" });
@@ -80,13 +59,6 @@ router.delete("/profile/:pinId", protect, async (req, res) => {
 router.get("/profile/:pinId/check", protect, async (req, res) => {
   try {
     const { pinId } = req.params;
-
-    // BLOCK deactivated / deleted users from doing any checks
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
 
     const exists = await SavedPin.findOne({
       user: req.user._id,
@@ -109,33 +81,14 @@ router.get("/:username/saved-pins", async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // If profile owner is deactivated/deleted, hide their saved page
-    if (user.isDeactivated || user.isDeleted) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
     const savedPins = await SavedPin.find({ user: user._id })
       .populate({
         path: "pin",
-        populate: {
-          path: "user",
-          select: "username profilePicture isDeactivated isDeleted",
-        },
+        populate: { path: "user", select: "username profilePicture" },
       })
       .sort({ savedAt: -1 });
 
-    // Hide saved pins whose owner is deactivated/deleted or missing
-    const visiblePins = savedPins
-      .filter(
-        (s) =>
-          s.pin &&
-          s.pin.user &&
-          !s.pin.user.isDeactivated &&
-          !s.pin.user.isDeleted
-      )
-      .map((s) => s.pin);
-
-    res.status(200).json(visiblePins);
+    res.status(200).json(savedPins.map((s) => s.pin));
   } catch (error) {
     console.error("Get saved pins error:", error);
     res.status(500).json({ message: error.message });

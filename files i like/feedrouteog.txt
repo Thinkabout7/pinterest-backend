@@ -8,36 +8,22 @@ import protect from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
+// 📜 Get feed pins (from followed users + self, fallback to global)
 router.get("/", protect, async (req, res) => {
   try {
-    // Block deactivated users from seeing feed
-    if (req.user.isDeactivated) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const me = await User.findById(req.user._id);
     if (!me) return res.status(404).json({ message: "User not found" });
 
     const userIds = [...me.following, req.user._id];
 
-    const filter =
-      userIds.length > 0
-        ? { user: { $in: userIds } }
-        : {};
+    // If user follows nobody, show global feed instead
+    const filter = userIds.length > 0 ? { user: { $in: userIds } } : {};
 
-    let pins = await Pin.find(filter)
-      .populate({
-        path: "user",
-        select: "username profilePicture isDeleted isDeactivated",
-        match: { isDeleted: false, isDeactivated: false },
-      })
+    const pins = await Pin.find(filter)
+      .populate("user", "username profilePicture")
       .sort({ createdAt: -1 });
 
-    // Remove pins whose owners were filtered out
-    pins = pins.filter((p) => p.user);
-
+    // Optional: enrich each pin with like/comment counts
     const enriched = await Promise.all(
       pins.map(async (pin) => {
         const [likes, comments] = await Promise.all([

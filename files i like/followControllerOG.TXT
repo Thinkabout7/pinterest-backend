@@ -7,13 +7,6 @@ import Notification from "../models/Notification.js";
 ----------------------------------------------------------- */
 export const followUser = async (req, res) => {
   try {
-    // Block deactivated / deleted users from following anyone
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const followerId = req.user._id;
     const targetId = req.params.id;
 
@@ -25,16 +18,14 @@ export const followUser = async (req, res) => {
     const target = await User.findById(targetId);
     if (!target) return res.status(404).json({ message: "User not found" });
 
-    // Block following deactivated users
+    // 🔥 Block following deactivated users
     if (target.isDeactivated) {
       return res.status(400).json({ message: "This account is deactivated" });
     }
 
-    // Block following deleted users
+    // 🔥 Block following deleted users
     if (target.isDeleted) {
-      return res
-        .status(400)
-        .json({ message: "This account no longer exists" });
+      return res.status(400).json({ message: "This account no longer exists" });
     }
 
     const alreadyFollowing = follower.following.some(
@@ -74,13 +65,6 @@ export const followUser = async (req, res) => {
 ----------------------------------------------------------- */
 export const unfollowUser = async (req, res) => {
   try {
-    // Block deactivated / deleted users from unfollowing
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const followerId = req.user._id;
     const targetId = req.params.id;
 
@@ -121,12 +105,7 @@ export const getFollowers = async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Hide lists for deleted / deactivated profiles
-    if (user.isDeleted || user.isDeactivated) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Hide deleted/deactivated accounts from the list
+    // 🔥 Hide deleted/deactivated accounts
     const visible = user.followers.filter(
       (u) => !u.isDeleted && !u.isDeactivated
     );
@@ -150,12 +129,7 @@ export const getFollowing = async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Hide lists for deleted / deactivated profiles
-    if (user.isDeleted || user.isDeactivated) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Hide deleted/deactivated accounts from the list
+    // 🔥 Hide deleted/deactivated accounts
     const visible = user.following.filter(
       (u) => !u.isDeleted && !u.isDeactivated
     );
@@ -172,13 +146,6 @@ export const getFollowing = async (req, res) => {
 ----------------------------------------------------------- */
 export const checkFollowStatus = async (req, res) => {
   try {
-    // Block deactivated / deleted user from checking
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res
-        .status(403)
-        .json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const myId = req.user._id;
     const targetId = req.params.id;
 
@@ -186,7 +153,7 @@ export const checkFollowStatus = async (req, res) => {
     const target = await User.findById(targetId);
     if (!target) return res.status(404).json({ message: "User not found" });
 
-    // Block deleted/deactivated target
+    // 🔥 Block deleted/deactivated users
     if (target.isDeleted || target.isDeactivated) {
       return res.json({
         isFollowing: false,

@@ -3,68 +3,46 @@ import Board from "../models/Board.js";
 import Pin from "../models/Pin.js";
 
 // ============================================================
-// GET BOARD (hide deactivated / filter pins)
+// GET /api/boards/:boardId  (Board details)
 // ============================================================
 export const getBoardById = async (req, res) => {
   try {
     const board = await Board.findById(req.params.boardId)
-      .populate({
-        path: "user",
-        select: "username profilePicture isDeactivated isDeleted",
-      })
-      .populate({
-        path: "pins",
-        populate: {
-          path: "user",
-          select: "username profilePicture isDeactivated isDeleted",
-          match: { isDeactivated: false, isDeleted: false },
-        },
-      });
+      .populate("pins")
+      .populate("user");
 
-    if (!board || !board.user || board.user.isDeactivated || board.user.isDeleted) {
-      return res.status(404).json({ message: "Board not found" });
-    }
+    if (!board) return res.status(404).json({ message: "Board not found" });
 
-    // Filter pins whose owners are hidden
-    const visiblePins = board.pins.filter((p) => p && p.user);
-
-    res.status(200).json({ ...board.toObject(), pins: visiblePins });
+    res.status(200).json(board);
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
 // ============================================================
-// UPDATE BOARD (block deactivated users)
+// PUT /api/boards/:boardId  (Update board name/description/cover)
 // ============================================================
 export const updateBoard = async (req, res) => {
   try {
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const boardId = req.params.boardId;
     const { name, description, coverImage } = req.body;
 
-    const board = await Board.findById(boardId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted",
-    });
+    // Find board
+    const board = await Board.findById(boardId);
+    if (!board) return res.status(404).json({ message: "Board not found" });
 
-    if (!board || !board.user || board.user.isDeactivated || board.user.isDeleted) {
-      return res.status(404).json({ message: "Board not found" });
-    }
-
-    if (board.user._id.toString() !== req.user.id) {
+    // Check ownership
+    if (board.user.toString() !== req.user.id)
       return res.status(403).json({ message: "Access denied" });
-    }
 
+    // Apply updates
     if (name !== undefined) board.name = name;
     if (description !== undefined) board.description = description;
     if (coverImage !== undefined) board.coverImage = coverImage;
 
     await board.save();
 
+    // ⭐ IMPORTANT: Return FULL board object
     const updatedBoard = await Board.findById(boardId)
       .populate("pins")
       .populate("user");
@@ -82,26 +60,16 @@ export const updateBoard = async (req, res) => {
 };
 
 // ============================================================
-// DELETE BOARD (block deactivated users)
+// DELETE /api/boards/:boardId
 // ============================================================
 export const deleteBoard = async (req, res) => {
   try {
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
+    const board = await Board.findById(req.params.boardId);
 
-    const board = await Board.findById(req.params.boardId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted",
-    });
+    if (!board) return res.status(404).json({ message: "Board not found" });
 
-    if (!board || !board.user || board.user.isDeactivated || board.user.isDeleted) {
-      return res.status(404).json({ message: "Board not found" });
-    }
-
-    if (board.user._id.toString() !== req.user.id) {
+    if (board.user.toString() !== req.user.id)
       return res.status(403).json({ message: "Access denied" });
-    }
 
     await board.deleteOne();
 
@@ -112,40 +80,24 @@ export const deleteBoard = async (req, res) => {
 };
 
 // ============================================================
-// ADD PIN TO BOARD (block deactivated users + hide invalid pins)
+// POST /api/boards/:boardId/pins/:pinId (Add pin to board)
 // ============================================================
 export const addPinToBoard = async (req, res) => {
   try {
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const { boardId, pinId } = req.params;
 
-    const board = await Board.findById(boardId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted",
-    });
+    const board = await Board.findById(boardId);
+    const pin = await Pin.findById(pinId);
 
-    if (!board || !board.user || board.user.isDeactivated || board.user.isDeleted) {
-      return res.status(404).json({ message: "Board not found" });
-    }
+    if (!board || !pin)
+      return res.status(404).json({ message: "Board or Pin not found" });
 
-    if (board.user._id.toString() !== req.user.id) {
+    if (board.user.toString() !== req.user.id)
       return res.status(403).json({ message: "Access denied" });
-    }
-
-    const pin = await Pin.findById(pinId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted",
-    });
-
-    if (!pin || !pin.user || pin.user.isDeactivated || pin.user.isDeleted) {
-      return res.status(404).json({ message: "Pin not found" });
-    }
 
     if (!board.pins.includes(pinId)) board.pins.push(pinId);
 
+    // Auto-assign first pin as cover if no cover exists
     if (!board.coverImage) {
       board.coverImage = pin.mediaUrl || pin.image || null;
     }
@@ -163,31 +115,22 @@ export const addPinToBoard = async (req, res) => {
 };
 
 // ============================================================
-// REMOVE PIN FROM BOARD
+// DELETE /api/boards/:boardId/pins/:pinId (Remove pin)
 // ============================================================
 export const removePinFromBoard = async (req, res) => {
   try {
-    if (req.user?.isDeactivated || req.user?.isDeleted) {
-      return res.status(403).json({ message: "Account is deactivated. Reactivate to continue." });
-    }
-
     const { boardId, pinId } = req.params;
 
-    const board = await Board.findById(boardId).populate({
-      path: "user",
-      select: "isDeactivated isDeleted",
-    });
+    const board = await Board.findById(boardId);
 
-    if (!board || !board.user || board.user.isDeactivated || board.user.isDeleted) {
-      return res.status(404).json({ message: "Board not found" });
-    }
+    if (!board) return res.status(404).json({ message: "Board not found" });
 
-    if (board.user._id.toString() !== req.user.id) {
+    if (board.user.toString() !== req.user.id)
       return res.status(403).json({ message: "Access denied" });
-    }
 
     board.pins = board.pins.filter((id) => id.toString() !== pinId);
 
+    // If removed pin was the cover, reset cover
     if (board.coverImage) {
       const firstPin = await Pin.findById(board.pins[0]);
       board.coverImage = firstPin ? firstPin.mediaUrl || firstPin.image : null;
@@ -205,6 +148,9 @@ export const removePinFromBoard = async (req, res) => {
   }
 };
 
+// ============================================================
+// Helper for assigning cover image
+// ============================================================
 export const autoAssignCover = async (boardId, pinImage) => {
   await Board.findByIdAndUpdate(
     boardId,
