@@ -21,6 +21,12 @@ router.post("/register", async (req, res) => {
 
     password = String(password);
 
+    if (password.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters" });
+    }
+
     const existing = await User.findOne({ email });
     console.log("Existing user check:", existing);
     if (existing) {
@@ -191,6 +197,12 @@ router.put("/change-password", protect, async (req, res) => {
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ message: "Missing fields" });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters" });
     }
 
     const user = await User.findById(req.user._id);
