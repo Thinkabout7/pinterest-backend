@@ -22,18 +22,30 @@ export const searchPins = async (req, res) => {
     }
 
     const q = query.toLowerCase();
+    const searchTerms = Array.from(
+      new Set(
+        [
+          q,
+          q.endsWith("es") ? q.slice(0, -2) : null,
+          q.endsWith("s") ? q.slice(0, -1) : null,
+        ].filter(Boolean)
+      )
+    );
+
+    const buildOrQueries = (fields, terms) =>
+      fields.flatMap((field) =>
+        terms.map((term) => ({ [field]: { $regex: term, $options: "i" } }))
+      );
 
     const results = { pins: [], users: [], boards: [] };
 
     // ---- 1) PIN SEARCH (includes videos filter) ----
     if (["all", "pins", "videos"].includes(type)) {
       const pinsRaw = await Pin.find({
-        $or: [
-          { title: { $regex: q, $options: "i" } },
-          { description: { $regex: q, $options: "i" } },
-          { category: { $regex: q, $options: "i" } },
-          { tags: { $regex: q, $options: "i" } },
-        ],
+        $or: buildOrQueries(
+          ["title", "description", "category", "tags"],
+          searchTerms
+        ),
       }).populate({
         path: "user",
         select: "username profilePicture isDeactivated isDeleted",
@@ -83,7 +95,7 @@ export const searchPins = async (req, res) => {
     // ---- 3) USER / PROFILE SEARCH ----
     if (["all", "profiles"].includes(type)) {
       const users = await User.find({
-        username: { $regex: q, $options: "i" },
+        $or: buildOrQueries(["username"], searchTerms),
         isDeleted: false,
         isDeactivated: false,
       }).select("_id username profilePicture");
@@ -94,10 +106,7 @@ export const searchPins = async (req, res) => {
     // ---- 4) BOARD SEARCH ----
     if (["all", "boards"].includes(type)) {
       const boardsRaw = await Board.find({
-        $or: [
-          { name: { $regex: q, $options: "i" } },
-          { description: { $regex: q, $options: "i" } },
-        ],
+        $or: buildOrQueries(["name", "description"], searchTerms),
       })
         .populate({
           path: "user",
