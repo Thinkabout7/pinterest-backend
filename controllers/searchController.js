@@ -32,6 +32,19 @@ export const searchPins = async (req, res) => {
       )
     );
 
+    const sanitizeText = (val, maxLen = 140) => {
+      if (typeof val !== "string") return "";
+      const collapsed = val.replace(/\s+/g, " ").trim();
+      if (!collapsed) return "";
+      const lower = collapsed.toLowerCase();
+      // Drop obvious debug/JSON-ish payloads
+      if (lower.includes("bounding box")) return "";
+      if (/[\{\}\[\]]/.test(collapsed) && collapsed.length > 80) return "";
+      return collapsed.length > maxLen
+        ? `${collapsed.slice(0, maxLen)}…`
+        : collapsed;
+    };
+
     const buildOrQueries = (fields, terms) =>
       fields.flatMap((field) =>
         terms.map((term) => ({ [field]: { $regex: term, $options: "i" } }))
@@ -120,18 +133,16 @@ export const searchPins = async (req, res) => {
         }
       }
 
-      results.pins = sortedPins.map((pin) => ({
-        ...pin.toObject(),
-        descriptionSnippet: pin.description
-          ? `${pin.description.slice(0, 140)}${
-              pin.description.length > 140 ? "…" : ""
-            }`
-          : "",
-        suggestionText:
-          pin.title && pin.title.trim().length > 0
-            ? pin.title
-            : (pin.tags || []).slice(0, 3).join(", "),
-      }));
+      results.pins = sortedPins.map((pin) => {
+        const obj = pin.toObject();
+        const titleClean = sanitizeText(obj.title);
+        const tagsClean = sanitizeText((obj.tags || []).slice(0, 3).join(", "));
+        return {
+          ...obj,
+          descriptionSnippet: sanitizeText(obj.description),
+          suggestionText: titleClean || tagsClean,
+        };
+      });
     }
 
     // ---- 3) USER / PROFILE SEARCH ----
