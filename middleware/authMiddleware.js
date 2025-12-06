@@ -27,7 +27,7 @@ const protect = async (req, res, next) => {
 
     // ❌ Block deactivated users from doing *anything*
     // except: /settings, /logout, /reactivate
-    const allowedPaths = ["/settings", "/reactivate", "/logout"];
+    const allowedPaths = ["/settings", "/reactivate", "/logout", "/profile"];
 
     if (
       req.user.isDeactivated &&
