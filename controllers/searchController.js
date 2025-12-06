@@ -1,11 +1,13 @@
 // controllers/searchController.js
 import Pin from "../models/Pin.js";
 import User from "../models/User.js";
+import Board from "../models/Board.js";
 
 // 🔍 TEXT + TAG SEARCH + ADVANCED RANKING
 export const searchPins = async (req, res) => {
   try {
     const query = req.query.q;
+    const type = (req.query.type || "all").toLowerCase();
     if (!query) {
       return res
         .status(400)
@@ -21,67 +23,110 @@ export const searchPins = async (req, res) => {
 
     const q = query.toLowerCase();
 
-    // ---- 1) FETCH CANDIDATES (match ANY field) ----
-    const pinsRaw = await Pin.find({
-      $or: [
-        { title: { $regex: q, $options: "i" } },
-        { description: { $regex: q, $options: "i" } },
-        { category: { $regex: q, $options: "i" } },
-        { tags: { $regex: q, $options: "i" } },
-      ],
-    }).populate({
-      path: "user",
-      select: "username profilePicture isDeactivated isDeleted",
-      match: { isDeactivated: false, isDeleted: false },
-    });
+    const results = { pins: [], users: [], boards: [] };
 
-    // Hide pins whose owners are deactivated/deleted
-    const pins = pinsRaw.filter((p) => p.user);
+    // ---- 1) PIN SEARCH (includes videos filter) ----
+    if (["all", "pins", "videos"].includes(type)) {
+      const pinsRaw = await Pin.find({
+        $or: [
+          { title: { $regex: q, $options: "i" } },
+          { description: { $regex: q, $options: "i" } },
+          { category: { $regex: q, $options: "i" } },
+          { tags: { $regex: q, $options: "i" } },
+        ],
+      }).populate({
+        path: "user",
+        select: "username profilePicture isDeactivated isDeleted",
+        match: { isDeactivated: false, isDeleted: false },
+      });
 
-    // ---- 2) SCORE EACH PIN ----
-    const scored = pins.map((pin) => {
-      let score = 0;
+      // Hide pins whose owners are deactivated/deleted
+      let pins = pinsRaw.filter((p) => p.user);
 
-      const title = pin.title?.toLowerCase() || "";
-      const desc = pin.description?.toLowerCase() || "";
-      const cat = pin.category?.toLowerCase() || "";
-      const tags = pin.tags?.map((t) => t.toLowerCase()) || [];
+      if (type === "videos") {
+        pins = pins.filter((p) => p.mediaType === "video");
+      }
 
-      if (title.includes(q)) score += 50;
-      if (title.startsWith(q)) score += 20;
-      if (title === q) score += 35;
+      // ---- 2) SCORE EACH PIN ----
+      const scored = pins.map((pin) => {
+        let score = 0;
 
-      if (desc.includes(q)) score += 30;
-      if (desc.startsWith(q)) score += 10;
+        const title = pin.title?.toLowerCase() || "";
+        const desc = pin.description?.toLowerCase() || "";
+        const cat = pin.category?.toLowerCase() || "";
+        const tags = pin.tags?.map((t) => t.toLowerCase()) || [];
 
-      if (cat.includes(q)) score += 15;
-      if (cat === q) score += 20;
+        if (title.includes(q)) score += 50;
+        if (title.startsWith(q)) score += 20;
+        if (title === q) score += 35;
 
-      if (tags.includes(q)) score += 40;
-      if (tags.some((t) => t.includes(q))) score += 25;
+        if (desc.includes(q)) score += 30;
+        if (desc.startsWith(q)) score += 10;
 
-      score += (pin.likesCount || 0) * 3;
-      score += (pin.commentsCount || 0) * 2;
+        if (cat.includes(q)) score += 15;
+        if (cat === q) score += 20;
 
-      return { pin, score };
-    });
+        if (tags.includes(q)) score += 40;
+        if (tags.some((t) => t.includes(q))) score += 25;
 
-    scored.sort((a, b) => b.score - a.score);
+        score += (pin.likesCount || 0) * 3;
+        score += (pin.commentsCount || 0) * 2;
 
-    const sortedPins = scored.map((s) => s.pin);
+        return { pin, score };
+      });
 
-    // ---- 4) USER SEARCH ----
-    const users = await User.find({
-      username: { $regex: q, $options: "i" },
-      isDeleted: false,
-      isDeactivated: false,
-    }).select("username profilePicture email");
+      scored.sort((a, b) => b.score - a.score);
+
+      results.pins = scored.map((s) => s.pin);
+    }
+
+    // ---- 3) USER / PROFILE SEARCH ----
+    if (["all", "profiles"].includes(type)) {
+      const users = await User.find({
+        username: { $regex: q, $options: "i" },
+        isDeleted: false,
+        isDeactivated: false,
+      }).select("_id username profilePicture");
+
+      results.users = users;
+    }
+
+    // ---- 4) BOARD SEARCH ----
+    if (["all", "boards"].includes(type)) {
+      const boardsRaw = await Board.find({
+        $or: [
+          { name: { $regex: q, $options: "i" } },
+          { description: { $regex: q, $options: "i" } },
+        ],
+      })
+        .populate({
+          path: "user",
+          select: "username isDeactivated isDeleted",
+          match: { isDeactivated: false, isDeleted: false },
+        })
+        .populate({
+          path: "pins",
+          select: "mediaUrl mediaType",
+        });
+
+      const boards = boardsRaw
+        .filter((b) => b.user)
+        .map((b) => ({
+          _id: b._id,
+          name: b.name,
+          coverImage: b.coverImage || b.pins?.[0]?.mediaUrl || "",
+          pinsCount: b.pins?.length || 0,
+          owner: b.user.username,
+        }));
+
+      results.boards = boards;
+    }
 
     // ---- 5) FINAL RESPONSE ----
     res.status(200).json({
       query,
-      pins: sortedPins,
-      users,
+      type,
+      ...results,
     });
   } catch (err) {
     console.error("Search Error:", err);
