@@ -37,6 +37,24 @@ export const searchPins = async (req, res) => {
         terms.map((term) => ({ [field]: { $regex: term, $options: "i" } }))
       );
 
+    const vehicleKeywords = [
+      "car",
+      "cars",
+      "vehicle",
+      "vehicles",
+      "auto",
+      "automotive",
+      "truck",
+      "trucks",
+      "jeep",
+      "jeeps",
+      "suv",
+      "suvs",
+    ];
+    const queryHasVehicleTerm = vehicleKeywords.some((v) =>
+      searchTerms.includes(v)
+    );
+
     const results = { pins: [], users: [], boards: [] };
 
     // ---- 1) PIN SEARCH (includes videos filter) ----
@@ -89,7 +107,31 @@ export const searchPins = async (req, res) => {
 
       scored.sort((a, b) => b.score - a.score);
 
-      results.pins = scored.map((s) => s.pin);
+      let sortedPins = scored.map((s) => s.pin);
+
+      if (queryHasVehicleTerm) {
+        const withVehicleTag = sortedPins.filter((pin) =>
+          (pin.tags || []).some((t) =>
+            vehicleKeywords.includes(String(t).toLowerCase())
+          )
+        );
+        if (withVehicleTag.length > 0) {
+          sortedPins = withVehicleTag;
+        }
+      }
+
+      results.pins = sortedPins.map((pin) => ({
+        ...pin.toObject(),
+        descriptionSnippet: pin.description
+          ? `${pin.description.slice(0, 140)}${
+              pin.description.length > 140 ? "…" : ""
+            }`
+          : "",
+        suggestionText:
+          pin.title && pin.title.trim().length > 0
+            ? pin.title
+            : (pin.tags || []).slice(0, 3).join(", "),
+      }));
     }
 
     // ---- 3) USER / PROFILE SEARCH ----
