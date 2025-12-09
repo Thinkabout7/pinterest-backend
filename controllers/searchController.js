@@ -135,12 +135,40 @@ export const searchPins = async (req, res) => {
 
       results.pins = sortedPins.map((pin) => {
         const obj = pin.toObject();
+
         const titleClean = sanitizeText(obj.title);
-        const tagsClean = sanitizeText((obj.tags || []).slice(0, 3).join(", "));
+        const tagList = (obj.tags || []).map((t) => sanitizeText(t));
+        const qLower = q.toLowerCase();
+
+        let suggestion = "";
+
+        // 1. Title match
+        if (
+          titleClean &&
+          titleClean.toLowerCase().includes(qLower) &&
+          titleClean.split(" ").length <= 4
+        ) {
+          suggestion = titleClean;
+        }
+
+        // 2. Tag match
+        if (!suggestion) {
+          const match = tagList.find(
+            (tag) =>
+              tag &&
+              tag.toLowerCase().includes(qLower) &&
+              tag.split(" ").length <= 3
+          );
+          if (match) suggestion = match;
+        }
+
+        // 3. No valid suggestion
+        if (!suggestion) suggestion = null;
+
         return {
           ...obj,
           descriptionSnippet: sanitizeText(obj.description),
-          suggestionText: titleClean || tagsClean,
+          suggestionText: suggestion,
         };
       });
     }
