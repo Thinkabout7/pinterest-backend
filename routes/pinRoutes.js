@@ -54,6 +54,14 @@ router.post("/", protect, upload.single("media"), async (req, res) => {
       if (aiTags?.length > 0) {
         savedPin.tags = aiTags;
         await savedPin.save();
+        console.log(
+          "AI tags generated for pin",
+          savedPin._id.toString(),
+          ":",
+          aiTags.join(", ")
+        );
+      } else {
+        console.log("AI tagging returned no tags for pin", savedPin._id.toString());
       }
     } catch (err) {
       console.log("AI tagging failed:", err.message);
