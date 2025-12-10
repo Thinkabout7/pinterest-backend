@@ -1,73 +1,102 @@
-// backend/utils/autocomplete.js
+// utils/autocomplete.js
 
-// --- STOPWORDS so suggestions stay clean ---
+// Stopwords to remove noise
 const STOPWORDS = new Set([
-  "the", "a", "an", "of", "and", "to", "in", "for", "on", "with", "at", "is"
+  "the",
+  "a",
+  "an",
+  "and",
+  "of",
+  "in",
+  "on",
+  "to",
+  "for",
+  "with",
+  "at",
+  "is",
+  "it",
 ]);
 
-// --- Normalize words ---
-function cleanWord(str = "") {
-  if (!str) return "";
-  return str.toLowerCase().trim().replace(/[^a-z0-9\s]/g, "");
+// Global keyword index (shared across requests)
+const GLOBAL_KEYWORDS = new Set();
+
+// Clean a single word
+export function cleanWord(str = "") {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s]/g, "");
 }
 
-// --- Split title/category/tags into useful keywords ---
-export function extractKeywords(pin) {
+function addSingleAndPairs(words, set) {
+  for (let i = 0; i < words.length; i++) {
+    const w1 = words[i];
+    if (w1 && !STOPWORDS.has(w1) && w1.length > 1 && w1.length <= 20) {
+      set.add(w1);
+    }
+    const w2 = words[i + 1];
+    if (
+      w1 &&
+      w2 &&
+      !STOPWORDS.has(w1) &&
+      !STOPWORDS.has(w2)
+    ) {
+      const phrase = `${w1} ${w2}`;
+      if (phrase.length <= 40) set.add(phrase);
+    }
+  }
+}
+
+// Extract usable keywords from a pin
+export function extractKeywordsFromPin(pin) {
   const set = new Set();
 
-  // TITLE (short words only)
+  // TITLE WORDS + pairs
   if (pin.title) {
-    const words = cleanWord(pin.title).split(/\s+/);
-    words.forEach(w => {
-      if (w && !STOPWORDS.has(w)) set.add(w);
-    });
+    const words = cleanWord(pin.title).split(/\s+/).filter(Boolean);
+    addSingleAndPairs(words, set);
   }
 
-  // CATEGORY (single keyword)
+  // CATEGORY
   if (pin.category) {
     const cat = cleanWord(pin.category);
     if (cat && !STOPWORDS.has(cat)) set.add(cat);
   }
 
-  // TAGS (allowed fully)
+  // TAGS
   if (Array.isArray(pin.tags)) {
-    pin.tags.forEach(tag => {
-      const words = cleanWord(tag).split(/\s+/);
-      words.forEach(w => {
-        if (w && !STOPWORDS.has(w)) set.add(w);
-      });
+    pin.tags.forEach((tag) => {
+      const words = cleanWord(tag).split(/\s+/).filter(Boolean);
+      addSingleAndPairs(words, set);
     });
   }
 
   return Array.from(set);
 }
 
-// --- Pinterest-style variants: keyword + suffixes ---
-const SUFFIXES = [
-  "aesthetic",
-  "drawing",
-  "ideas",
-  "wallpaper",
-  "design",
-  "background",
-  "tutorial",
-  "art"
-];
-
-export function generateVariants(keyword) {
-  const out = new Set();
-  const base = keyword.toLowerCase();
-
-  out.add(base); // main keyword shown
-
-  SUFFIXES.forEach(suf => {
-    out.add(`${base} ${suf}`);
+// Add keywords to the global index
+export function addKeywordsToIndex(keywords = []) {
+  keywords.forEach((kw) => {
+    if (kw) GLOBAL_KEYWORDS.add(kw);
   });
-
-  return Array.from(out);
+  return Array.from(GLOBAL_KEYWORDS);
 }
 
-// --- Ranking system for suggestions (7 max) ---
+// Build/update the global index from a list of pins
+export function buildKeywordIndexFromPins(pins = []) {
+  pins.forEach((pin) => {
+    const kws = extractKeywordsFromPin(pin);
+    addKeywordsToIndex(kws);
+  });
+  return Array.from(GLOBAL_KEYWORDS);
+}
+
+// Get current global keyword index
+export function getKeywordIndex() {
+  return Array.from(GLOBAL_KEYWORDS);
+}
+
+// Build ranked suggestions
 export function getRankedSuggestions(allKeywords, query) {
   const q = cleanWord(query);
   if (!q) return [];
@@ -82,7 +111,7 @@ export function getRankedSuggestions(allKeywords, query) {
     else if (kw.endsWith(q)) ends.push(kw);
   }
 
+  // unique + max 7
   const ordered = [...starts, ...contains, ...ends];
-
   return Array.from(new Set(ordered)).slice(0, 7);
 }

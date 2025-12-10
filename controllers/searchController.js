@@ -3,12 +3,13 @@ import Pin from "../models/Pin.js";
 import User from "../models/User.js";
 import Board from "../models/Board.js";
 import {
-  extractKeywords,
-  generateVariants,
+  extractKeywordsFromPin,
   getRankedSuggestions,
+  buildKeywordIndexFromPins,
+  getKeywordIndex,
 } from "../utils/autocomplete.js";
 
-// 🔍 TEXT + TAG SEARCH + ADVANCED RANKING
+// TEXT + TAG SEARCH + ADVANCED RANKING
 export const searchPins = async (req, res) => {
   try {
     const query = req.query.q;
@@ -42,7 +43,7 @@ export const searchPins = async (req, res) => {
       if (lower.includes("bounding box")) return "";
       if (/[\{\}\[\]]/.test(collapsed) && collapsed.length > 80) return "";
       return collapsed.length > maxLen
-        ? `${collapsed.slice(0, maxLen)}…`
+        ? `${collapsed.slice(0, maxLen)}...`
         : collapsed;
     };
 
@@ -70,7 +71,6 @@ export const searchPins = async (req, res) => {
     );
 
     const results = { pins: [], users: [], boards: [] };
-    let rankedSuggestions = [];
 
     // ---- 1) PIN SEARCH (includes videos filter) ----
     if (["all", "pins", "videos"].includes(type)) {
@@ -145,19 +145,6 @@ export const searchPins = async (req, res) => {
           sortedPins = withVehicleTag;
         }
       }
-
-      const keywords = new Set();
-
-      sortedPins.forEach((pin) => {
-        const base = extractKeywords(pin);
-        base.forEach((kw) => {
-          const variants = generateVariants(kw);
-          variants.forEach((v) => keywords.add(v));
-        });
-      });
-
-      const allVariants = Array.from(keywords);
-      rankedSuggestions = getRankedSuggestions(allVariants, query);
 
       results.pins = sortedPins.map((pin) => {
         const obj = pin.toObject();
@@ -238,12 +225,27 @@ export const searchPins = async (req, res) => {
       results.boards = boards;
     }
 
-    // ---- 5) FINAL RESPONSE ----
+    // --- BUILD CLEAN AUTOCOMPLETE KEYWORDS ---
+    let allKeywords = getKeywordIndex();
+    if (allKeywords.length === 0) {
+      const indexPins = await Pin.find({}, "title category tags").lean();
+      allKeywords = buildKeywordIndexFromPins(indexPins);
+    } else {
+      // keep index fresh with any newly seen pins
+      buildKeywordIndexFromPins(results.pins);
+      allKeywords = getKeywordIndex();
+    }
+
+    const suggestions = getRankedSuggestions(allKeywords, query);
+
+    // --- RETURN FULL RESPONSE INCLUDING SUGGESTIONS ---
     res.status(200).json({
       query,
       type,
-      ...results,
-      suggestions: rankedSuggestions,
+      pins: results.pins,
+      users: results.users || [],
+      boards: results.boards || [],
+      suggestions,
     });
   } catch (err) {
     console.error("Search Error:", err);
