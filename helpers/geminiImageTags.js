@@ -2,7 +2,7 @@
 import fetch from 'node-fetch';
 
 /**
- * Generates 12–15 high-quality AI tags (including brands) for images OR videos using Gemini 2.0 Flash
+ * Generates 12�?"15 high-quality AI tags (including brands) for images OR videos using Gemini 2.0 Flash
  * @param {string} mediaUrl - Cloudinary URL of the image or video
  * @returns {string[]} - Array of lowercase tags
  */
@@ -17,27 +17,39 @@ export async function generateImageTags(mediaUrl) {
 
     const mimeType = isVideo ? 'video/mp4' : 'image/jpeg';
 
-    // --- Strong brand-focused prompt ---
+    // --- strongest full-spectrum prompt for both images + videos ---
     const prompt = isVideo
-      ? `Analyze this video very carefully and extract 12–15 short tags.
-         ALWAYS try to identify:
-         - exact brands (nike, adidas, timberland, apple)
-         - logos
-         - shoe type
-         - clothing type
-         - accessories
-         - device models
-         - colors, objects, scene
-         Return ONLY comma-separated tags:`
-      : `Analyze this image very carefully and extract 12–15 short tags.
-         ALWAYS try to identify:
-         - exact product brands (timberland, adidas, nike, apple)
-         - logos
-         - shoe type
-         - tech device models (iphone 14 pro, macbook air)
-         - clothing type
-         - colors, objects, background
-         Return ONLY comma-separated tags, no sentences:`;
+      ? `Analyze this video VERY carefully and generate 20�25 short, specific tags.
+Identify clearly:
+- celebrities or public figures (name them if recognizable)
+- exact fashion brands (nike, adidas, puma, timberland, herm�s, gucci, balenciaga, zara)
+- clothing items, shoes, outfits, accessories
+- handbags (birkin, clutch, crossbody), jewelry, sunglasses
+- tech devices and models (iphone 14 pro, samsung s23 ultra)
+- food, drinks, animals, objects, vehicles
+- environment and scene context (street, cafe, bedroom, outdoor, studio)
+- actions, gestures, movements visible in the video
+- colors, textures, materials, style
+
+OUTPUT RULES:
+- Return ONLY comma-separated tags.
+- No sentences, no explanations, no full phrases.
+`
+      : `Analyze this image VERY carefully and generate 20�25 short, specific tags.
+Identify clearly:
+- celebrities or public figures (name them if recognizable)
+- exact product and fashion brands (herm�s birkin bag, nike air force 1, adidas samba, timberland boots)
+- clothing pieces and fashion details (oversized blazer, ripped jeans, tailored coat)
+- accessories (handbag, sunglasses, hoop earrings, necklace, wristwatch)
+- tech devices and models (iphone 14 pro, macbook air)
+- animals, food, plants, objects, furniture
+- scene/environment (street style, cafe interior, living room, beach)
+- colors, materials, textures, aesthetic theme
+
+OUTPUT RULES:
+- Return ONLY comma-separated tags.
+- No sentences, no explanations, no filler words.
+`;
 
     // --- Download media file ---
     const response = await fetch(mediaUrl);
@@ -48,7 +60,7 @@ export async function generateImageTags(mediaUrl) {
 
     // --- Call Gemini 2.0 Flash ---
     const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GOOGLE_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -96,7 +108,8 @@ export async function generateImageTags(mediaUrl) {
       .slice(0, 15);
 
   } catch (error) {
-    console.error('Gemini Tag Error →', error.message);
+    console.error('Gemini Tag Error:', error.message);
     return []; // Never break pin upload
   }
 }
+

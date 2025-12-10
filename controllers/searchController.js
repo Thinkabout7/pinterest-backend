@@ -2,6 +2,11 @@
 import Pin from "../models/Pin.js";
 import User from "../models/User.js";
 import Board from "../models/Board.js";
+import {
+  extractKeywords,
+  generateVariants,
+  getRankedSuggestions,
+} from "../utils/autocomplete.js";
 
 // 🔍 TEXT + TAG SEARCH + ADVANCED RANKING
 export const searchPins = async (req, res) => {
@@ -21,16 +26,12 @@ export const searchPins = async (req, res) => {
         .json({ message: "Account is deactivated. Reactivate to continue." });
     }
 
-    const q = query.toLowerCase();
-    const searchTerms = Array.from(
-      new Set(
-        [
-          q,
-          q.endsWith("es") ? q.slice(0, -2) : null,
-          q.endsWith("s") ? q.slice(0, -1) : null,
-        ].filter(Boolean)
-      )
-    );
+    const q = query.trim().toLowerCase();
+    const baseTerms = [q];
+    if (q.endsWith("es")) baseTerms.push(q.slice(0, -2));
+    if (q.endsWith("s")) baseTerms.push(q.slice(0, -1));
+    else baseTerms.push(`${q}s`);
+    const searchTerms = Array.from(new Set(baseTerms.filter(Boolean)));
 
     const sanitizeText = (val, maxLen = 140) => {
       if (typeof val !== "string") return "";
@@ -69,14 +70,23 @@ export const searchPins = async (req, res) => {
     );
 
     const results = { pins: [], users: [], boards: [] };
+    let rankedSuggestions = [];
 
     // ---- 1) PIN SEARCH (includes videos filter) ----
     if (["all", "pins", "videos"].includes(type)) {
+      const escapedTerms = searchTerms.map((term) =>
+        term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      );
+      const pattern = escapedTerms.join("|");
+      const regex = new RegExp(`\\b(${pattern})\\b`, "i");
+
       const pinsRaw = await Pin.find({
-        $or: buildOrQueries(
-          ["title", "description", "category", "tags"],
-          searchTerms
-        ),
+        $or: [
+          { title: regex },
+          { description: regex },
+          { category: regex },
+          { tags: regex },
+        ],
       }).populate({
         path: "user",
         select: "username profilePicture isDeactivated isDeleted",
@@ -123,15 +133,31 @@ export const searchPins = async (req, res) => {
       let sortedPins = scored.map((s) => s.pin);
 
       if (queryHasVehicleTerm) {
+        const vehicleRegexes = vehicleKeywords.map(
+          (v) => new RegExp(`\\b${v}\\b`, "i")
+        );
         const withVehicleTag = sortedPins.filter((pin) =>
           (pin.tags || []).some((t) =>
-            vehicleKeywords.includes(String(t).toLowerCase())
+            vehicleRegexes.some((rx) => rx.test(String(t)))
           )
         );
         if (withVehicleTag.length > 0) {
           sortedPins = withVehicleTag;
         }
       }
+
+      const keywords = new Set();
+
+      sortedPins.forEach((pin) => {
+        const base = extractKeywords(pin);
+        base.forEach((kw) => {
+          const variants = generateVariants(kw);
+          variants.forEach((v) => keywords.add(v));
+        });
+      });
+
+      const allVariants = Array.from(keywords);
+      rankedSuggestions = getRankedSuggestions(allVariants, query);
 
       results.pins = sortedPins.map((pin) => {
         const obj = pin.toObject();
@@ -217,6 +243,7 @@ export const searchPins = async (req, res) => {
       query,
       type,
       ...results,
+      suggestions: rankedSuggestions,
     });
   } catch (err) {
     console.error("Search Error:", err);
