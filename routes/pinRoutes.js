@@ -179,6 +179,7 @@ router.post("/:pinId/likes", protect, async (req, res) => {
         sender: req.user._id,
         type: "like",
         pin: pin._id,
+        message: `${req.user.username} liked your pin`,
       });
     }
 
